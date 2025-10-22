@@ -8,7 +8,7 @@ import subprocess
 import time
 import random
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox, scrolledtext, simpledialog
+from tkinter import ttk, filedialog, messagebox, scrolledtext
 import os
 import threading
 from datetime import datetime, timedelta
@@ -212,10 +212,10 @@ class Hermes:
         # Acciones
         actions_title = tk.Frame(parent, bg=self.colors['bg'])
         actions_title.pack(fill=tk.X, pady=(0, 20))
-
+        
         tk.Label(actions_title, text="👤", font=('Inter', 20),
                 bg=self.colors['bg']).pack(side=tk.LEFT, padx=(0, 10))
-
+        
         tk.Label(actions_title, text="Acciones",
                 font=('Inter', 16, 'bold'),
                 bg=self.colors['bg'], fg='#000000').pack(side=tk.LEFT)
@@ -236,7 +236,7 @@ class Hermes:
         self.fidelizado_trigger.pack(side=tk.LEFT, padx=(15, 0))
 
         tk.Frame(parent, bg='#e0e0e0', height=1).pack(fill=tk.X, pady=(0, 25))
-
+        
         # Botones
         actions = tk.Frame(parent, bg=self.colors['bg'])
         actions.pack(fill=tk.X)
@@ -672,44 +672,35 @@ class Hermes:
         manual_window.transient(self.root)
         manual_window.grab_set()
 
-        wrapper = tk.Frame(manual_window, bg=self.colors['bg'])
-        wrapper.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
-
-        card = tk.Frame(
-            wrapper,
+        content = tk.Frame(
+            manual_window,
             bg='white',
             bd=0,
             relief=tk.FLAT,
             highlightthickness=1,
             highlightbackground='#dfe1e5'
         )
-        card.pack(fill=tk.BOTH, expand=True)
+        content.pack(fill=tk.BOTH, expand=True, padx=30, pady=30)
 
-        header = tk.Frame(card, bg=self.colors['blue'], height=90)
-        header.pack(fill=tk.X)
+        header = tk.Frame(content, bg=self.colors['blue'], height=90)
+        header.pack(fill=tk.X, pady=(0, 24))
         header.pack_propagate(False)
 
-        tk.Label(
-            header,
-            text="📱 Fidelizado",
-            font=('Inter', 24, 'bold'),
-            bg=self.colors['blue'],
-            fg='white'
-        ).pack(pady=(18, 0))
+        tk.Label(header,
+                 text="📱 Fidelizado",
+                 font=('Inter', 22, 'bold'),
+                 bg=self.colors['blue'], fg='white').pack(pady=(16, 0))
 
-        tk.Label(
-            header,
-            text="Carga de números y mensajes",
-            font=('Inter', 12),
-            bg=self.colors['blue'],
-            fg='white'
-        ).pack()
+        tk.Label(header,
+                 text="Carga de números y mensajes",
+                 font=('Inter', 12),
+                 bg=self.colors['blue'], fg='white').pack()
 
-        body = tk.Frame(card, bg='white')
-        body.pack(fill=tk.BOTH, expand=True, padx=30, pady=30)
+        body = tk.Frame(content, bg='white')
+        body.pack(fill=tk.BOTH, expand=True)
 
         numbers_frame = tk.Frame(body, bg='white')
-        numbers_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 20))
+        numbers_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=(0, 20))
 
         tk.Label(numbers_frame,
                  text="Pega los números (uno por línea, sin prefijo +549):",
@@ -733,7 +724,7 @@ class Hermes:
             numbers_text.insert('1.0', "\n".join(self.manual_numbers))
 
         controls_frame = tk.Frame(body, bg='white')
-        controls_frame.pack(fill=tk.X, pady=(0, 20))
+        controls_frame.pack(fill=tk.X, padx=20, pady=(0, 20))
 
         loops_var = tk.IntVar(value=max(1, self.manual_loops))
 
@@ -788,15 +779,15 @@ class Hermes:
 
         tk.Button(
             message_controls,
-            text="📂  Cargar mensajes (.txt)",
+            text="📂 Cargar mensajes (.txt)",
             command=load_messages_from_file,
             bg=self.colors['orange'],
-            fg='white',
+            fg='#000000',
             font=('Inter', 11, 'bold'),
             relief=tk.FLAT,
             cursor='hand2',
             activebackground='#e3a10b',
-            activeforeground='white',
+            activeforeground='#000000',
             bd=0,
             padx=14,
             pady=8
@@ -808,7 +799,7 @@ class Hermes:
                  bg='white', fg=self.colors['text_light']).pack(anchor='e', pady=(6, 0))
 
         buttons_frame = tk.Frame(body, bg='white')
-        buttons_frame.pack(fill=tk.X, pady=(10, 0))
+        buttons_frame.pack(fill=tk.X, padx=20, pady=(10, 0))
 
         def close_window():
             manual_window.grab_release()
@@ -875,8 +866,10 @@ class Hermes:
                 'success'
             )
 
-            messagebox.showinfo("Lista Fidelizado",
-                                f"Se generaron {len(self.links)} mensajes a partir de la lista Fidelizado.")
+            messagebox.showinfo(
+                "Lista Fidelizado",
+                f"Se generaron {len(self.links)} mensajes a partir de la lista Fidelizado."
+            )
 
             close_window()
 
@@ -913,7 +906,7 @@ class Hermes:
         ).pack(side=tk.RIGHT)
 
     def generate_manual_links(self, numbers, messages, loops):
-        """Generar URLs de WhatsApp a partir de números y mensajes manuales"""
+        """Generar URLs de WhatsApp a partir de números y mensajes Fidelizado"""
         if not numbers or not messages:
             return []
 
