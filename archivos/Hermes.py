@@ -1237,7 +1237,15 @@ class Hermes:
                 self.current_index = i
                 device = self.devices[idx]
                 idx = (idx + 1) % len(self.devices)
-                
+
+                self.close_all_apps(device)
+
+                while self.is_paused and not self.should_stop:
+                    time.sleep(0.1)
+                if self.should_stop:
+                    self.log("⚠ Envío cancelado", 'warning')
+                    break
+
                 if self.send_msg(device, link, i, len(self.links), pkg, chrome):
                     self.sent_count += 1
                 else:
@@ -1318,35 +1326,17 @@ class Hermes:
             self.log("⚠ No se puede cerrar apps: ADB no configurado", 'warning')
             return
 
-        self.log(f"🧹 Cerrando aplicaciones en {device}...", 'info')
+        self.log(f"🧹 Cerrando WhatsApp y Google en {device}...", 'info')
 
-        try:
-            result = subprocess.run(
-                [adb, '-s', device, 'shell', 'am', 'kill-all'],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-            if result.returncode == 0:
-                self.log(f"✅ am kill-all ejecutado en {device}", 'success')
-            else:
-                error_msg = result.stderr.strip() or result.stdout.strip() or "Error desconocido"
-                self.log(f"⚠ No se pudo ejecutar kill-all en {device}: {error_msg}", 'warning')
-        except subprocess.TimeoutExpired:
-            self.log(f"❌ Timeout al cerrar apps en {device} con kill-all", 'error')
-            return
-        except Exception as exc:
-            self.log(f"❌ Error al cerrar apps en {device}: {exc}", 'error')
-            return
-
-        packages = [
-            "com.whatsapp.w4b",
-            "com.whatsapp",
-            "com.android.chrome",
-            "com.google.android.googlequicksearchbox",
+        targets = [
+            ("WhatsApp Business", "com.whatsapp.w4b"),
+            ("WhatsApp", "com.whatsapp"),
+            ("Google", "com.google.android.googlequicksearchbox"),
         ]
 
-        for package in packages:
+        had_error = False
+
+        for label, package in targets:
             try:
                 result = subprocess.run(
                     [adb, '-s', device, 'shell', 'am', 'force-stop', package],
@@ -1355,12 +1345,21 @@ class Hermes:
                     timeout=10
                 )
                 if result.returncode != 0:
+                    had_error = True
                     error_msg = result.stderr.strip() or result.stdout.strip() or "Error desconocido"
-                    self.log(f"⚠ No se pudo cerrar {package} en {device}: {error_msg}", 'warning')
+                    self.log(
+                        f"⚠ No se pudo cerrar {label} ({package}) en {device}: {error_msg}",
+                        'warning'
+                    )
             except subprocess.TimeoutExpired:
-                self.log(f"❌ Timeout al forzar cierre de {package} en {device}", 'error')
+                had_error = True
+                self.log(f"❌ Timeout al forzar cierre de {label} ({package}) en {device}", 'error')
             except Exception as exc:
-                self.log(f"❌ Error al forzar cierre de {package} en {device}: {exc}", 'error')
+                had_error = True
+                self.log(f"❌ Error al forzar cierre de {label} ({package}) en {device}: {exc}", 'error')
+
+        if not had_error:
+            self.log(f"✅ Apps cerradas correctamente en {device}", 'success')
 
 
 def main():
