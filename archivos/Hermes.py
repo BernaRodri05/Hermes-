@@ -380,14 +380,9 @@ class Hermes:
         self.right_panel = right
         self._current_main_layout = None
 
-        def _on_main_configure(event):
+        def _on_main_configure(_event):
             canvas.configure(scrollregion=canvas.bbox("all"))
-            available_width = 0
-            if hasattr(self, 'main_canvas'):
-                available_width = self.main_canvas.winfo_width()
-            if not available_width and hasattr(self, 'root'):
-                available_width = self.root.winfo_width()
-            self._update_main_layout(available_width)
+            self._update_main_layout(self._get_available_main_width())
 
         main.bind("<Configure>", _on_main_configure)
 
@@ -395,8 +390,7 @@ class Hermes:
         self.setup_right(right)
 
         main.update_idletasks()
-        initial_width = main.winfo_width() or self.root.winfo_width()
-        self._update_main_layout(initial_width)
+        self._update_main_layout(self._get_available_main_width())
         
     def setup_left(self, parent):
         """Panel izquierdo"""
@@ -703,17 +697,22 @@ class Hermes:
         self.log("ℹ Sigue los pasos 1, 2, 3 y 4", 'info')
         self.log("✓ ADB detectado", 'success')
 
+    def _get_available_main_width(self):
+        """Obtener el ancho disponible para el layout principal."""
+        width = 0
+        if hasattr(self, 'main_canvas'):
+            width = self.main_canvas.winfo_width()
+        if not width and hasattr(self, 'root'):
+            width = self.root.winfo_width()
+        return width
+
     def _update_main_layout(self, width=None):
         """Actualizar disposición principal entre columnas y modo apilado"""
         if not hasattr(self, 'left_panel') or not hasattr(self, 'right_panel'):
             return
 
         if not width:
-            width = 0
-            if hasattr(self, 'main_canvas'):
-                width = self.main_canvas.winfo_width()
-            if not width and hasattr(self, 'root'):
-                width = self.root.winfo_width()
+            width = self._get_available_main_width()
 
         threshold = 1100
         mode = 'stacked' if width and width < threshold else 'columns'
