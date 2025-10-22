@@ -1237,7 +1237,15 @@ class Hermes:
                 self.current_index = i
                 device = self.devices[idx]
                 idx = (idx + 1) % len(self.devices)
-                
+
+                self.close_all_apps(device)
+
+                while self.is_paused and not self.should_stop:
+                    time.sleep(0.1)
+                if self.should_stop:
+                    self.log("⚠ Envío cancelado", 'warning')
+                    break
+
                 if self.send_msg(device, link, i, len(self.links), pkg, chrome):
                     self.sent_count += 1
                 else:
@@ -1339,12 +1347,37 @@ class Hermes:
             self.log(f"❌ Error al cerrar apps en {device}: {exc}", 'error')
             return
 
-        packages = [
+        dynamic_packages = set()
+        try:
+            recents = subprocess.run(
+                [adb, '-s', device, 'shell', 'cmd', 'activity', 'recents'],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            if recents.returncode == 0:
+                for line in recents.stdout.splitlines():
+                    if 'Recent #' not in line or 'A=' not in line:
+                        continue
+                    component = line.split('A=', 1)[1].split()[0]
+                    package = component.split('/')[0].strip()
+                    if package and package != 'null':
+                        dynamic_packages.add(package)
+            else:
+                error_msg = recents.stderr.strip() or recents.stdout.strip() or "Error desconocido"
+                self.log(f"⚠ No se pudieron leer apps recientes en {device}: {error_msg}", 'warning')
+        except subprocess.TimeoutExpired:
+            self.log(f"⚠ Timeout al leer apps recientes en {device}", 'warning')
+        except Exception as exc:
+            self.log(f"⚠ Error al leer apps recientes en {device}: {exc}", 'warning')
+
+        packages = {
             "com.whatsapp.w4b",
             "com.whatsapp",
             "com.android.chrome",
             "com.google.android.googlequicksearchbox",
-        ]
+        }
+        packages.update(dynamic_packages)
 
         for package in packages:
             try:
@@ -1361,6 +1394,23 @@ class Hermes:
                 self.log(f"❌ Timeout al forzar cierre de {package} en {device}", 'error')
             except Exception as exc:
                 self.log(f"❌ Error al forzar cierre de {package} en {device}: {exc}", 'error')
+
+        try:
+            result = subprocess.run(
+                [adb, '-s', device, 'shell', 'cmd', 'activity', 'clear-recents'],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            if result.returncode == 0:
+                self.log(f"🧨 Tareas recientes limpiadas en {device}", 'info')
+            else:
+                error_msg = result.stderr.strip() or result.stdout.strip() or "Error desconocido"
+                self.log(f"⚠ No se pudieron limpiar recientes en {device}: {error_msg}", 'warning')
+        except subprocess.TimeoutExpired:
+            self.log(f"⚠ Timeout al limpiar recientes en {device}", 'warning')
+        except Exception as exc:
+            self.log(f"⚠ Error al limpiar recientes en {device}: {exc}", 'warning')
 
 
 def main():
