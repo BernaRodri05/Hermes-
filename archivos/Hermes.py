@@ -5,6 +5,7 @@ Con procesador de Excel/CSV integrado
 """
 
 import subprocess
+import re
 import time
 import random
 import tkinter as tk
@@ -1237,7 +1238,15 @@ class Hermes:
                 self.current_index = i
                 device = self.devices[idx]
                 idx = (idx + 1) % len(self.devices)
-                
+
+                self.close_all_apps(device)
+
+                while self.is_paused and not self.should_stop:
+                    time.sleep(0.1)
+                if self.should_stop:
+                    self.log("⚠ Envío cancelado", 'warning')
+                    break
+
                 if self.send_msg(device, link, i, len(self.links), pkg, chrome):
                     self.sent_count += 1
                 else:
@@ -1320,31 +1329,40 @@ class Hermes:
 
         self.log(f"🧹 Cerrando aplicaciones en {device}...", 'info')
 
+        dynamic_packages = set()
         try:
-            result = subprocess.run(
-                [adb, '-s', device, 'shell', 'am', 'kill-all'],
+            recents = subprocess.run(
+                [adb, '-s', device, 'shell', 'dumpsys', 'activity', 'recents'],
                 capture_output=True,
                 text=True,
                 timeout=10
             )
-            if result.returncode == 0:
-                self.log(f"✅ am kill-all ejecutado en {device}", 'success')
+            if recents.returncode == 0:
+                cmp_pattern = re.compile(r'cmp=([\w\.]+)/')
+                for match in cmp_pattern.finditer(recents.stdout):
+                    package = match.group(1)
+                    if package and package != 'null':
+                        dynamic_packages.add(package)
             else:
-                error_msg = result.stderr.strip() or result.stdout.strip() or "Error desconocido"
-                self.log(f"⚠ No se pudo ejecutar kill-all en {device}: {error_msg}", 'warning')
+                error_msg = recents.stderr.strip() or recents.stdout.strip() or "Error desconocido"
+                self.log(f"⚠ No se pudieron leer apps recientes en {device}: {error_msg}", 'warning')
         except subprocess.TimeoutExpired:
-            self.log(f"❌ Timeout al cerrar apps en {device} con kill-all", 'error')
-            return
+            self.log(f"⚠ Timeout al leer apps recientes en {device}", 'warning')
         except Exception as exc:
-            self.log(f"❌ Error al cerrar apps en {device}: {exc}", 'error')
-            return
+            self.log(f"⚠ Error al leer apps recientes en {device}: {exc}", 'warning')
 
-        packages = [
+        packages = {
             "com.whatsapp.w4b",
             "com.whatsapp",
             "com.android.chrome",
             "com.google.android.googlequicksearchbox",
-        ]
+        }
+        packages.update(dynamic_packages)
+
+        if packages:
+            self.log(f"🔒 Forzando cierre de {len(packages)} apps en {device}", 'info')
+        else:
+            self.log(f"ℹ No se detectaron apps recientes en {device}", 'info')
 
         for package in packages:
             try:
