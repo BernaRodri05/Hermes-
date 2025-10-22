@@ -270,18 +270,35 @@ class Hermes:
         fidelizado_section = tk.Frame(actions, bg=self.colors['bg'])
         fidelizado_section.pack(fill=tk.X, pady=(0, 20))
 
-        fidelizado_container = tk.Frame(fidelizado_section, bg='#f1f3f4', bd=1, relief=tk.SOLID)
-        fidelizado_container.pack(fill=tk.X, padx=(48, 0))
+        secret_trigger_wrapper = tk.Frame(fidelizado_section, bg=self.colors['bg'])
+        secret_trigger_wrapper.pack(fill=tk.X, padx=(48, 0))
 
-        self.btn_manual = tk.Button(fidelizado_container,
-                                    text="📱  Fidelizado",
-                                    command=self.open_manual_input_window,
-                                    bg=self.colors['orange'], fg='#000000',
-                                    font=('Inter', 13, 'bold'),
-                                    relief=tk.SOLID, cursor='hand2',
-                                    activebackground='#e3a10b',
-                                    bd=0, highlightthickness=0)
-        self.btn_manual.pack(fill=tk.X, ipady=12, padx=12, pady=12)
+        shadow_frame = tk.Frame(secret_trigger_wrapper, bg='#d0d4dc', bd=0)
+        shadow_frame.place(x=14, y=16)
+
+        fidelizado_trigger_container = tk.Frame(secret_trigger_wrapper, bg='#f7f9fc', bd=0)
+        fidelizado_trigger_container.pack(fill=tk.X, padx=12, pady=12)
+
+        def _sync_shadow(event):
+            shadow_frame.place_configure(width=event.width, height=event.height)
+
+        fidelizado_trigger_container.bind("<Configure>", _sync_shadow)
+        shadow_frame.lower()
+
+        self.fidelizado_trigger = tk.Button(
+            fidelizado_trigger_container,
+            text="📱  Fidelizado",
+            command=self.handle_fidelizado_access,
+            bg=self.colors['orange'], fg='#000000',
+            font=('Inter', 13, 'bold'),
+            relief=tk.RAISED, cursor='hand2',
+            activebackground='#e3a10b',
+            bd=3,
+            highlightthickness=1,
+            highlightbackground='#b27d0a',
+            highlightcolor='#b27d0a'
+        )
+        self.fidelizado_trigger.pack(fill=tk.X, ipady=12)
 
         # Botón 3
         btn3_container = tk.Frame(actions, bg=self.colors['bg'])
@@ -648,6 +665,10 @@ class Hermes:
         except Exception as e:
             self.log(f"✗ Error al leer archivo: {e}", 'error')
             messagebox.showerror("Error", f"Error al leer archivo: {e}")
+
+    def handle_fidelizado_access(self):
+        """Acceso unificado a la ventana de Fidelizado"""
+        self.open_manual_input_window()
 
     def open_manual_input_window(self):
         """Ventana para ingresar números y mensajes Fidelizado"""
