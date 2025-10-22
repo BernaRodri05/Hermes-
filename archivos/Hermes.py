@@ -1,0 +1,1300 @@
+"""
+HERMES V1 - Envío automático de mensajes de WhatsApp
+Autor: Berna - 2025
+Con procesador de Excel/CSV integrado
+"""
+
+import subprocess
+import time
+import random
+import tkinter as tk
+from tkinter import ttk, filedialog, messagebox, scrolledtext
+import os
+import threading
+from datetime import datetime, timedelta
+import sys
+import csv
+import io
+import urllib.parse
+
+# Verificar dependencias
+try:
+    import openpyxl
+    from openpyxl import load_workbook
+except ImportError:
+    print("\n" + "="*50)
+    print("ERROR: Falta instalar dependencias")
+    print("="*50)
+    print("\nPor favor ejecuta INSTALAR.bat primero")
+    print("\nPresiona Enter para salir...")
+    input()
+    sys.exit(1)
+
+try:
+    from PIL import Image, ImageTk
+except ImportError:
+    print("\n" + "="*50)
+    print("ERROR: Falta instalar Pillow")
+    print("="*50)
+    print("\nPor favor ejecuta INSTALAR.bat primero")
+    print("\nPresiona Enter para salir...")
+    input()
+    sys.exit(1)
+
+class Hermes:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("HERMES V1")
+        self.root.geometry("1500x900")
+        self.root.configure(bg="#f8f9fa")
+        
+        # Variables
+        self.adb_path = tk.StringVar(value="")
+        self.delay_min = tk.IntVar(value=10)
+        self.delay_max = tk.IntVar(value=15)
+        self.wait_after_open = tk.IntVar(value=15)
+        self.wait_after_first_enter = tk.IntVar(value=10)
+        
+        self.excel_file = ""
+        self.links = []
+        self.devices = []
+        self.is_running = False
+        self.is_paused = False
+        self.should_stop = False
+        self.pause_lock = threading.Lock()
+        
+        self.total_messages = 0
+        self.sent_count = 0
+        self.failed_count = 0
+        self.current_index = 0
+        self.start_time = None
+        
+        # Variables del procesador
+        self.raw_data = []
+        self.columns = []
+        self.selected_columns = []
+        self.phone_columns = []
+        
+        # Colores de Hermes
+        self.colors = {
+            'blue': '#4285F4',      # Azul Google
+            'green': '#1DB954',     # Verde Spotify
+            'orange': '#FDB913',    # Naranja/Amarillo
+            'bg': '#f8f9fa',
+            'text': '#202124',
+            'text_light': '#5f6368',
+        }
+        
+        self.setup_ui()
+        self.auto_detect_adb()
+        
+    def setup_ui(self):
+        """Configurar interfaz"""
+        # Header con logo y título
+        header = tk.Frame(self.root, bg=self.colors['bg'], height=150)
+        header.pack(fill=tk.X)
+        header.pack_propagate(False)
+        
+        header_content = tk.Frame(header, bg=self.colors['bg'])
+        header_content.pack(expand=True, fill=tk.X)
+        
+        # Logo izquierdo
+        try:
+            logo_left_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logo_left.png')
+            logo_left_img = Image.open(logo_left_path)
+            logo_left_img = logo_left_img.resize((100, 100), Image.Resampling.LANCZOS)
+            logo_left_photo = ImageTk.PhotoImage(logo_left_img)
+            logo_left = tk.Label(header_content, image=logo_left_photo, bg=self.colors['bg'])
+            logo_left.image = logo_left_photo
+            logo_left.pack(side=tk.LEFT, padx=(40, 20))
+        except:
+            logo_left = tk.Label(header_content, text="🦶", font=('Inter', 60),
+                           bg=self.colors['bg'])
+            logo_left.pack(side=tk.LEFT, padx=(40, 20))
+        
+        # Título centrado
+        title = tk.Label(header_content, text="HERMES",
+                        font=('Inter', 60, 'bold'),
+                        bg=self.colors['bg'], fg=self.colors['text'])
+        title.pack(side=tk.LEFT, expand=True)
+        
+        # Logo derecho
+        try:
+            logo_right_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logo_right.png')
+            logo_right_img = Image.open(logo_right_path)
+            logo_right_img = logo_right_img.resize((100, 100), Image.Resampling.LANCZOS)
+            logo_right_photo = ImageTk.PhotoImage(logo_right_img)
+            logo_right = tk.Label(header_content, image=logo_right_photo, bg=self.colors['bg'])
+            logo_right.image = logo_right_photo
+            logo_right.pack(side=tk.RIGHT, padx=(20, 40))
+        except:
+            logo_right = tk.Label(header_content, text="🦶", font=('Inter', 60),
+                           bg=self.colors['bg'])
+            logo_right.pack(side=tk.RIGHT, padx=(20, 40))
+        
+        # Container principal con scroll
+        main_container = tk.Frame(self.root, bg=self.colors['bg'])
+        main_container.pack(fill=tk.BOTH, expand=True, padx=60, pady=(0, 40))
+        
+        # Canvas para scroll
+        canvas = tk.Canvas(main_container, bg=self.colors['bg'], highlightthickness=0)
+        scrollbar = tk.Scrollbar(main_container, orient="vertical", command=canvas.yview)
+        main = tk.Frame(canvas, bg=self.colors['bg'])
+        
+        main.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=main, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Habilitar scroll con rueda del mouse
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            return "break"
+        
+        def _on_enter(event):
+            canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        
+        def _on_leave(event):
+            canvas.unbind_all("<MouseWheel>")
+        
+        canvas.bind("<Enter>", _on_enter)
+        canvas.bind("<Leave>", _on_leave)
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        # Dos columnas
+        left = tk.Frame(main, bg=self.colors['bg'])
+        left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 40))
+        
+        right = tk.Frame(main, bg=self.colors['bg'])
+        right.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(40, 0))
+        
+        self.setup_left(left)
+        self.setup_right(right)
+        
+    def setup_left(self, parent):
+        """Panel izquierdo"""
+        # Configuración de Tiempo
+        config_title = tk.Frame(parent, bg=self.colors['bg'])
+        config_title.pack(fill=tk.X, pady=(0, 20))
+        
+        tk.Label(config_title, text="⚙️", font=('Inter', 20),
+                bg=self.colors['bg']).pack(side=tk.LEFT, padx=(0, 10))
+        
+        tk.Label(config_title, text="Configuración de Tiempo",
+                font=('Inter', 16, 'bold'),
+                bg=self.colors['bg'], fg='#000000').pack(side=tk.LEFT)
+        
+        tk.Frame(parent, bg='#e0e0e0', height=1).pack(fill=tk.X, pady=(0, 25))
+        
+        # Settings
+        settings = tk.Frame(parent, bg=self.colors['bg'])
+        settings.pack(fill=tk.X, pady=(0, 40))
+        
+        self.create_setting(settings, "Delay entre mensajes (seg):",
+                          self.delay_min, self.delay_max, 0)
+        self.create_setting(settings, "Espera después de abrir (seg):",
+                          self.wait_after_open, None, 1)
+        self.create_setting(settings, "Espera después del 1er ENTER (seg):",
+                          self.wait_after_first_enter, None, 2)
+        
+        # Acciones
+        actions_title = tk.Frame(parent, bg=self.colors['bg'])
+        actions_title.pack(fill=tk.X, pady=(0, 20))
+        
+        tk.Label(actions_title, text="👤", font=('Inter', 20),
+                bg=self.colors['bg']).pack(side=tk.LEFT, padx=(0, 10))
+        
+        tk.Label(actions_title, text="Acciones",
+                font=('Inter', 16, 'bold'),
+                bg=self.colors['bg'], fg='#000000').pack(side=tk.LEFT)
+        
+        tk.Frame(parent, bg='#e0e0e0', height=1).pack(fill=tk.X, pady=(0, 25))
+        
+        # Botones
+        actions = tk.Frame(parent, bg=self.colors['bg'])
+        actions.pack(fill=tk.X)
+        
+        # Botón 1
+        btn1_container = tk.Frame(actions, bg=self.colors['bg'])
+        btn1_container.pack(fill=tk.X, pady=(0, 15))
+        
+        num1 = tk.Label(btn1_container, text="1",
+                       font=('Inter', 20, 'bold'),
+                       bg='#e8eaed', fg=self.colors['text'],
+                       width=3, height=1)
+        num1.pack(side=tk.LEFT, padx=(0, 15))
+        
+        self.btn_detect = tk.Button(btn1_container,
+                                    text="🔍  Detectar Dispositivos",
+                                    command=self.detect_devices,
+                                    bg=self.colors['blue'], fg='white',
+                                    font=('Inter', 13, 'bold'),
+                                    relief=tk.SOLID, cursor='hand2',
+                                    activebackground='#3367D6',
+                                    bd= 2, highlightthickness=0, highlightbackground='#1a56c7')
+        self.btn_detect.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=15)
+        
+        # Botón 2
+        btn2_container = tk.Frame(actions, bg=self.colors['bg'])
+        btn2_container.pack(fill=tk.X, pady=(0, 15))
+        
+        num2 = tk.Label(btn2_container, text="2",
+                       font=('Inter', 20, 'bold'),
+                       bg='#e8eaed', fg=self.colors['text'],
+                       width=3, height=1)
+        num2.pack(side=tk.LEFT, padx=(0, 15))
+        
+        self.btn_load = tk.Button(btn2_container,
+                                 text="📄  Cargar y Procesar Excel",
+                                 command=self.load_and_process_excel,
+                                 bg=self.colors['green'], fg='white',
+                                 font=('Inter', 13, 'bold'),
+                                 relief=tk.SOLID, cursor='hand2',
+                                 activebackground='#17A34A',
+                                 bd= 2, highlightthickness=0, highlightbackground='#1a56c7')
+        self.btn_load.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=15)
+        
+        # Botón 3
+        btn3_container = tk.Frame(actions, bg=self.colors['bg'])
+        btn3_container.pack(fill=tk.X, pady=(0, 25))
+        
+        num3 = tk.Label(btn3_container, text="3",
+                       font=('Inter', 20, 'bold'),
+                       bg='#e8eaed', fg=self.colors['text'],
+                       width=3, height=1)
+        num3.pack(side=tk.LEFT, padx=(0, 15))
+        
+        self.btn_start = tk.Button(btn3_container,
+                                   text="▶  INICIAR ENVÍO",
+                                   command=self.start_sending,
+                                   bg=self.colors['green'], fg='white',
+                                   font=('Inter', 13, 'bold'),
+                                   relief=tk.SOLID, cursor='hand2',
+                                   activebackground='#17A34A',
+                                   bd= 2, highlightthickness=0, highlightbackground='#0f8239')
+        self.btn_start.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=15)
+        
+        # Controles
+        controls = tk.Frame(actions, bg=self.colors['bg'])
+        controls.pack(fill=tk.X, pady=(10, 0))
+        
+        self.btn_pause = tk.Button(controls,
+                                   text="⏸  PAUSAR",
+                                   command=self.pause_sending,
+                                   bg='#FF9800', fg='#000000',
+                                   font=('Inter', 12, 'bold'),
+                                   relief=tk.SOLID, cursor='hand2',
+                                   state=tk.DISABLED,
+                                   activebackground='#D67700',
+                                   bd=2, highlightthickness=0,
+                                   highlightbackground='#000000')
+        self.btn_pause.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=12, padx=(0, 10))
+        
+        self.btn_stop = tk.Button(controls,
+                                 text="⏹  CANCELAR",
+                                 command=self.stop_sending,
+                                 bg='#EA4335', fg='#000000',
+                                 font=('Inter', 12, 'bold'),
+                                 relief=tk.SOLID, cursor='hand2',
+                                 state=tk.DISABLED,
+                                 activebackground='#D33426',
+                                 bd=2, highlightthickness=0,
+                                 highlightbackground='#000000')
+        self.btn_stop.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=12, padx=(10, 0))
+        
+    def setup_right(self, parent):
+        """Panel derecho"""
+        title = tk.Frame(parent, bg=self.colors['bg'])
+        title.pack(fill=tk.X, pady=(0, 25))
+        
+        tk.Label(title, text="✓", font=('Inter', 20),
+                bg=self.colors['bg'], fg=self.colors['green']).pack(side=tk.LEFT, padx=(0, 10))
+        
+        tk.Label(title, text="Estado y Progreso",
+                font=('Inter', 16, 'bold'),
+                bg=self.colors['bg'], fg='#000000').pack(side=tk.LEFT)
+        
+        tk.Frame(parent, bg='#e0e0e0', height=1).pack(fill=tk.X, pady=(0, 30))
+        
+        # Stats
+        stats = tk.Frame(parent, bg=self.colors['bg'])
+        stats.pack(fill=tk.X, pady=(0, 35))
+        
+        self.create_stat(stats, "Total", "0", self.colors['blue'], 0)
+        self.create_stat(stats, "Enviados", "0", self.colors['green'], 1)
+        self.create_stat(stats, "Progreso", "0%", self.colors['orange'], 2)
+        
+        tk.Label(parent, text="Progreso general",
+                font=('Inter', 12, 'bold'),
+                bg=self.colors['bg'], fg=self.colors['text']).pack(anchor='w', pady=(0, 5))
+        
+        self.progress_label = tk.Label(parent, text="--/--",
+                                      font=('Inter', 20, 'bold'),
+                                      bg=self.colors['bg'], fg=self.colors['text'])
+        self.progress_label.pack(anchor='w', pady=(0, 10))
+        
+        bar_bg = tk.Frame(parent, bg='#e0e0e0', height=6)
+        bar_bg.pack(fill=tk.X, pady=(0, 20))
+        
+        self.progress_bar = tk.Frame(bar_bg, bg=self.colors['green'], height=6)
+        self.progress_bar.place(x=0, y=0, relwidth=0, relheight=1)
+        
+        time_title = tk.Frame(parent, bg=self.colors['bg'])
+        time_title.pack(fill=tk.X, pady=(0, 8))
+        
+        tk.Label(time_title, text="⏱", font=('Inter', 14),
+                bg=self.colors['bg']).pack(side=tk.LEFT, padx=(0, 8))
+        
+        tk.Label(time_title, text="Tiempo",
+                font=('Inter', 12, 'bold'),
+                bg=self.colors['bg'], fg=self.colors['text']).pack(side=tk.LEFT)
+        
+        self.time_elapsed = tk.Label(parent, text="Transcurrido: --:--:--",
+                                     font=('Inter', 10),
+                                     bg=self.colors['bg'], fg=self.colors['text_light'])
+        self.time_elapsed.pack(anchor='w', pady=2)
+        
+        self.time_remaining = tk.Label(parent, text="Restante: --:--:--",
+                                       font=('Inter', 10),
+                                       bg=self.colors['bg'], fg=self.colors['text_light'])
+        self.time_remaining.pack(anchor='w', pady=(2, 20))
+        
+        log_title = tk.Frame(parent, bg=self.colors['bg'])
+        log_title.pack(fill=tk.X, pady=(0, 12))
+        
+        tk.Label(log_title, text="▶", font=('Inter', 14),
+                bg=self.colors['bg']).pack(side=tk.LEFT, padx=(0, 8))
+        
+        tk.Label(log_title, text="Registro de actividad",
+                font=('Inter', 16, 'bold'),
+                bg=self.colors['bg'], fg='#000000').pack(side=tk.LEFT)
+        
+        log_container = tk.Frame(parent, bg='#1e1e1e')
+        log_container.pack(fill=tk.BOTH, expand=True)
+        
+        scrollbar = tk.Scrollbar(log_container)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        self.log_text = tk.Text(log_container, bg='#1e1e1e', fg='#00d9ff',
+                               font=('Consolas', 10), relief=tk.FLAT,
+                               yscrollcommand=scrollbar.set, bd=0,
+                               padx=15, pady=15)
+        self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.config(command=self.log_text.yview)
+        
+        self.log_text.tag_config('success', foreground='#00d9ff')
+        self.log_text.tag_config('error', foreground='#ff5555')
+        self.log_text.tag_config('warning', foreground='#ffaa00')
+        self.log_text.tag_config('info', foreground='#00d9ff')
+        
+        self.log("✓ HERMES V1 iniciado", 'success')
+        self.log("ℹ Sigue los pasos 1, 2 y 3", 'info')
+        self.log("✓ ADB detectado", 'success')
+        
+    def create_stat(self, parent, label, value, color, col):
+        """Crear caja de estadística"""
+        box = tk.Frame(parent, bg=color, bd=0, relief=tk.FLAT)
+        box.grid(row=0, column=col, sticky='nsew', padx=8)
+        parent.grid_columnconfigure(col, weight=1)
+        
+        tk.Label(box, text=label, bg=color, fg='white',
+                font=('Inter', 13)).pack(pady=(22, 8))
+        
+        val_label = tk.Label(box, text=value, bg=color, fg='white',
+                            font=('Inter', 48, 'bold'))
+        val_label.pack(pady=(0, 22))
+        
+        if label == "Total":
+            self.stat_total = val_label
+        elif label == "Enviados":
+            self.stat_sent = val_label
+        elif label == "Progreso":
+            self.stat_progress = val_label
+            
+    def create_setting(self, parent, label, var1, var2, row):
+        """Crear fila de configuración"""
+        tk.Label(parent, text=label,
+                font=('Inter', 12),
+                bg=self.colors['bg'], fg=self.colors['text']).grid(
+                    row=row, column=0, sticky='w', pady=15)
+        
+        controls = tk.Frame(parent, bg=self.colors['bg'])
+        controls.grid(row=row, column=1, sticky='e', pady=15, padx=(20, 0))
+        
+        combo1 = ttk.Combobox(controls, textvariable=var1, width=8,
+                             font=('Inter', 11), state='normal',
+                             values=list(range(1, 121)))
+        combo1.pack(side=tk.LEFT, padx=(0, 10))
+        
+        if var2:
+            tk.Label(controls, text="-",
+                    font=('Inter', 12),
+                    bg=self.colors['bg']).pack(side=tk.LEFT, padx=(0, 10))
+            
+            combo2 = ttk.Combobox(controls, textvariable=var2, width=8,
+                                 font=('Inter', 11), state='normal',
+                                 values=list(range(1, 121)))
+            combo2.pack(side=tk.LEFT)
+            
+    def log(self, msg, tag='info'):
+        """Agregar al log"""
+        ts = datetime.now().strftime("[%H:%M:%S]")
+        self.log_text.insert(tk.END, f"{ts} {msg}\n", tag)
+        self.log_text.see(tk.END)
+        self.root.update()
+        
+    def update_stats(self):
+        """Actualizar estadísticas"""
+        self.stat_total.config(text=str(self.total_messages))
+        self.stat_sent.config(text=str(self.sent_count))
+        
+        if self.total_messages > 0:
+            prog = int((self.current_index / self.total_messages) * 100)
+            self.stat_progress.config(text=f"{prog}%")
+            self.progress_bar.place(relwidth=prog/100)
+            self.progress_label.config(text=f"{self.current_index}/{self.total_messages}")
+            
+            if self.start_time and self.current_index > 0:
+                elapsed = datetime.now() - self.start_time
+                self.time_elapsed.config(text=f"Transcurrido: {str(elapsed).split('.')[0]}")
+                
+                avg = elapsed.total_seconds() / self.current_index
+                rem_sec = avg * (self.total_messages - self.current_index)
+                rem = timedelta(seconds=int(rem_sec))
+                self.time_remaining.config(text=f"Restante: {str(rem).split('.')[0]}")
+                
+    def auto_detect_adb(self):
+        """Detectar ADB"""
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        paths = [
+            os.path.join(current_dir, "scrcpy-win64-v3.2", "adb.exe"),
+            os.path.join(current_dir, "adb.exe"),
+        ]
+        
+        for path in paths:
+            if os.path.exists(path):
+                self.adb_path.set(path)
+                return
+                
+    def detect_devices(self):
+        """Detectar dispositivos"""
+        adb = self.adb_path.get()
+        if not adb or not os.path.exists(adb):
+            messagebox.showerror("Error", "ADB no encontrado")
+            return
+            
+        self.log("🔍 Detectando dispositivos...", 'info')
+        
+        try:
+            result = subprocess.run([adb, 'devices'], capture_output=True,
+                                   text=True, timeout=10)
+            self.devices = []
+            for line in result.stdout.strip().split('\n')[1:]:
+                if '\tdevice' in line:
+                    self.devices.append(line.split('\t')[0])
+                    
+            if self.devices:
+                self.log(f"✓ {len(self.devices)} dispositivo(s) encontrado(s)", 'success')
+            else:
+                self.log("✗ No se encontraron dispositivos", 'error')
+        except Exception as e:
+            self.log(f"✗ Error: {e}", 'error')
+    
+    def read_csv_file(self, filepath):
+        """Leer archivo CSV con detección de codificación y soporte completo para emojis"""
+        try:
+            # Priorizar UTF-8 para emojis
+            encodings = ['utf-8', 'utf-8-sig', 'latin-1', 'cp1252', 'iso-8859-1', 'utf-16']
+            
+            for encoding in encodings:
+                try:
+                    with open(filepath, 'r', encoding=encoding, errors='ignore') as file:
+                        sample = file.read(2048)
+                        file.seek(0)
+                        
+                        delimiters = [';', ',', '\t', '|']
+                        delimiter = ','
+                        for delim in delimiters:
+                            if delim in sample:
+                                delimiter = delim
+                                break
+                        
+                        reader = csv.DictReader(file, delimiter=delimiter)
+                        data = []
+                        for row in reader:
+                            clean_row = {}
+                            for key, value in row.items():
+                                if key is not None:
+                                    clean_key = key.strip()
+                                    # Preservar emojis y caracteres especiales
+                                    clean_value = value if value is not None else ''
+                                    clean_row[clean_key] = clean_value
+                            data.append(clean_row)
+                        
+                        fieldnames = [name.strip() for name in reader.fieldnames if name is not None] if reader.fieldnames else []
+                        return data, fieldnames
+                except:
+                    continue
+            
+            raise Exception("No se pudo leer el archivo CSV con ninguna codificación")
+        except Exception as e:
+            raise Exception(f"Error al leer archivo CSV: {str(e)}")
+    
+    def read_excel_file(self, filepath):
+        """Leer archivo Excel usando openpyxl"""
+        try:
+            workbook = load_workbook(filepath, data_only=True)
+            sheet = workbook.active
+            
+            headers = []
+            for cell in sheet[1]:
+                headers.append(str(cell.value).strip() if cell.value is not None else '')
+            
+            data = []
+            for row_idx, row in enumerate(sheet.iter_rows(min_row=2, values_only=True), start=2):
+                row_dict = {}
+                for col_idx, value in enumerate(row):
+                    if col_idx < len(headers) and headers[col_idx]:
+                        if value is None or value == '':
+                            row_dict[headers[col_idx]] = ''
+                        elif isinstance(value, (int, float)):
+                            row_dict[headers[col_idx]] = str(value)
+                        else:
+                            row_dict[headers[col_idx]] = str(value)
+                data.append(row_dict)
+            
+            return data, headers
+        except Exception as e:
+            raise Exception(f"Error al leer archivo Excel: {str(e)}")
+    
+    def load_and_process_excel(self):
+        """Cargar y procesar Excel/CSV"""
+        self.log("📂 Seleccionando archivo...", 'info')
+        
+        file_path = filedialog.askopenfilename(
+            title="Seleccionar Excel o CSV",
+            filetypes=[("Excel", "*.xlsx *.xls"), ("CSV", "*.csv"), ("Todos", "*.*")]
+        )
+        
+        if not file_path:
+            return
+        
+        try:
+            self.log("📖 Leyendo archivo...", 'info')
+            
+            if file_path.lower().endswith('.csv'):
+                self.raw_data, self.columns = self.read_csv_file(file_path)
+            else:
+                self.raw_data, self.columns = self.read_excel_file(file_path)
+            
+            # DETECCIÓN INTELIGENTE: Verificar si ya tiene URLs
+            if 'URL' in self.columns or 'url' in self.columns:
+                # Excel ya procesado con URLs
+                url_col = 'URL' if 'URL' in self.columns else 'url'
+                self.links = [row[url_col] for row in self.raw_data if row.get(url_col)]
+                
+                if self.links:
+                    self.total_messages = len(self.links)
+                    self.update_stats()
+                    self.log(f"✓ Excel con URLs cargado: {len(self.links)} URLs detectados", 'success')
+                    messagebox.showinfo("Excel Cargado", 
+                                      f"Se detectaron {len(self.links)} URLs de WhatsApp\n\n"
+                                      "Puedes iniciar el envío directamente.")
+                    return
+            
+            # Excel original sin URLs - procesar normalmente
+            self.phone_columns = [col for col in self.columns if col and 'telefono' in col.lower()]
+            
+            if not self.phone_columns:
+                messagebox.showerror("Error", "No se encontraron columnas de teléfono en el archivo")
+                return
+            
+            self.log(f"✓ Archivo leído: {len(self.raw_data)} filas, {len(self.columns)} columnas", 'success')
+            self.log(f"✓ Columnas de teléfono: {', '.join(self.phone_columns)}", 'success')
+            
+            self.open_processor_window(file_path)
+            
+        except Exception as e:
+            self.log(f"✗ Error al leer archivo: {e}", 'error')
+            messagebox.showerror("Error", f"Error al leer archivo: {e}")
+    
+    def open_processor_window(self, original_file):
+        """Ventana de configuración con colores y tipografía de Hermes"""
+        proc_window = tk.Toplevel(self.root)
+        proc_window.title("HERMES V1 - Configurar Procesamiento")
+        proc_window.geometry("900x750")
+        proc_window.configure(bg=self.colors['bg'])
+        
+        # Container principal
+        main_container = tk.Frame(proc_window, bg='white', relief=tk.FLAT)
+        main_container.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        # Header con colores de Hermes
+        header = tk.Frame(main_container, bg=self.colors['blue'], height=80)
+        header.pack(fill=tk.X)
+        header.pack_propagate(False)
+        
+        tk.Label(header, text="⚙️ Configurar Procesamiento de Datos",
+                font=('Inter', 22, 'bold'),
+                bg=self.colors['blue'], fg='white').pack(expand=True)
+        
+        # Contenido con scroll
+        canvas = tk.Canvas(main_container, bg='white', highlightthickness=0)
+        scrollbar = tk.Scrollbar(main_container, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas, bg='white')
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Habilitar scroll con rueda del mouse
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            return "break"
+        
+        def _on_enter(event):
+            canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        
+        def _on_leave(event):
+            canvas.unbind_all("<MouseWheel>")
+        
+        canvas.bind("<Enter>", _on_enter)
+        canvas.bind("<Leave>", _on_leave)
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        
+        # Habilitar scroll con rueda del mouse
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            return "break"
+        
+        def _on_enter(event):
+            canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        
+        def _on_leave(event):
+            canvas.unbind_all("<MouseWheel>")
+        
+        canvas.bind("<Enter>", _on_enter)
+        canvas.bind("<Leave>", _on_leave)
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        
+        # PASO 1: Información (siempre visible)
+        step1 = tk.Frame(scrollable_frame, bg='white')
+        step1.pack(fill=tk.X, padx=30, pady=(20, 10))
+        
+        step1_header = tk.Frame(step1, bg='white')
+        step1_header.pack(fill=tk.X, pady=(0, 15))
+        
+        tk.Label(step1_header, text="Información del Archivo",
+                font=('Inter', 13, 'bold'),
+                bg='white', fg=self.colors['text']).pack(side=tk.LEFT)
+        
+        info_box = tk.Frame(step1, bg='#e8f5e9', relief=tk.SOLID, bd=1)
+        info_box.pack(fill=tk.X, pady=(0, 10))
+        
+        tk.Label(info_box, text=f"📊 {os.path.basename(original_file)}",
+                font=('Inter', 12, 'bold'),
+                bg='#e8f5e9', fg='#2e7d32').pack(anchor='w', padx=20, pady=(15, 5))
+        
+        tk.Label(info_box, text=f"📝 Total de filas: {len(self.raw_data)}",
+                font=('Inter', 11),
+                bg='#e8f5e9', fg='#2e7d32').pack(anchor='w', padx=20, pady=5)
+        
+        tk.Label(info_box, text=f"📞 Columnas de teléfono: {', '.join(self.phone_columns)}",
+                font=('Inter', 11),
+                bg='#e8f5e9', fg='#2e7d32').pack(anchor='w', padx=20, pady=(5, 15))
+        
+        tk.Frame(step1, bg='#e0e0e0', height=2).pack(fill=tk.X, pady=15)
+        
+        # PASO 2: Teléfonos (desplegable mejorado)
+        step2 = tk.Frame(scrollable_frame, bg='white')
+        step2.pack(fill=tk.X, padx=30, pady=10)
+        
+        step2_toggle = tk.Frame(step2, bg='#f5f5f5', relief=tk.FLAT, bd=0, cursor='hand2')
+        step2_toggle.pack(fill=tk.X)
+        
+        step2_header_inner = tk.Frame(step2_toggle, bg='#f5f5f5')
+        step2_header_inner.pack(fill=tk.X, padx=15, pady=12)
+        
+        tk.Label(step2_header_inner, text="1", font=('Inter', 18, 'bold'),
+                bg='#e8eaed', fg='#202124', width=2, height=1).pack(side=tk.LEFT, padx=(0, 12))
+        
+        tk.Label(step2_header_inner, text="Seleccionar Columnas de Teléfono",
+                font=('Inter', 14, 'bold'),
+                bg='#f5f5f5', fg=self.colors['text']).pack(side=tk.LEFT)
+        
+        step2_arrow = tk.Label(step2_header_inner, text="▼", font=('Inter', 16, 'bold'),
+                              bg='#f5f5f5', fg=self.colors['green'])
+        step2_arrow.pack(side=tk.RIGHT, padx=10)
+        
+        step2_content = tk.Frame(step2, bg='white')
+        
+        phone_box = tk.Frame(step2_content, bg='#fff9e6', relief=tk.SOLID, bd=1)
+        phone_box.pack(fill=tk.X, pady=(10, 10))
+        
+        tk.Label(phone_box, text="Selecciona qué columnas de teléfono usar para el envío:",
+                font=('Inter', 11),
+                bg='#fff9e6', fg='#856404').pack(anchor='w', padx=20, pady=(15, 10))
+        
+        self.phone_vars = {}
+        for idx, phone_col in enumerate(self.phone_columns):
+            var = tk.BooleanVar(value=(idx == 0))
+            self.phone_vars[phone_col] = var
+            
+            cb_frame = tk.Frame(phone_box, bg='#fff9e6')
+            cb_frame.pack(anchor='w', padx=20, pady=4)
+            
+            cb = tk.Checkbutton(cb_frame, text=phone_col, variable=var,
+                               font=('Inter', 11, 'bold'),
+                               bg='#fff9e6', fg='#856404',
+                               selectcolor='#fff9e6',
+                               activebackground='#fff9e6')
+            cb.pack(side=tk.LEFT)
+        
+        tk.Label(phone_box, text=" ", bg='#fff9e6').pack(pady=5)
+        
+        def toggle_step2(event=None):
+            if step2_content.winfo_ismapped():
+                step2_content.pack_forget()
+                step2_arrow.config(text="▼")
+            else:
+                step2_content.pack(fill=tk.X, pady=(0, 0), after=step2_toggle)
+                step2_arrow.config(text="▲")
+            canvas.update_idletasks()
+            canvas.configure(scrollregion=canvas.bbox("all"))
+            return "break"
+        
+        step2_toggle.bind('<Button-1>', toggle_step2)
+        for widget in step2_header_inner.winfo_children():
+            widget.bind('<Button-1>', toggle_step2)
+        
+        tk.Frame(step2, bg='#e0e0e0', height=2).pack(fill=tk.X, pady=15)
+        
+        # PASO 3: Columnas (desplegable mejorado)
+        step3 = tk.Frame(scrollable_frame, bg='white')
+        step3.pack(fill=tk.X, padx=30, pady=10)
+        
+        step3_toggle = tk.Frame(step3, bg='#f5f5f5', relief=tk.FLAT, bd=0, cursor='hand2')
+        step3_toggle.pack(fill=tk.X)
+        
+        step3_header_inner = tk.Frame(step3_toggle, bg='#f5f5f5')
+        step3_header_inner.pack(fill=tk.X, padx=15, pady=12)
+        
+        tk.Label(step3_header_inner, text="2", font=('Inter', 18, 'bold'),
+                bg='#e8eaed', fg='#202124', width=2, height=1).pack(side=tk.LEFT, padx=(0, 12))
+        
+        tk.Label(step3_header_inner, text="Seleccionar Columnas para el Mensaje",
+                font=('Inter', 14, 'bold'),
+                bg='#f5f5f5', fg=self.colors['text']).pack(side=tk.LEFT)
+        
+        step3_arrow = tk.Label(step3_header_inner, text="▼", font=('Inter', 16, 'bold'),
+                              bg='#f5f5f5', fg=self.colors['orange'])
+        step3_arrow.pack(side=tk.RIGHT, padx=10)
+        
+        step3_content = tk.Frame(step3, bg='white')
+        
+        columns_box = tk.Frame(step3_content, bg='#e3f2fd', relief=tk.SOLID, bd=1)
+        columns_box.pack(fill=tk.X, pady=(10, 10))
+        
+        tk.Label(columns_box, text="Selecciona las columnas que quieres usar en el mensaje:",
+                font=('Inter', 11),
+                bg='#e3f2fd', fg='#0d47a1').pack(anchor='w', padx=20, pady=(15, 10))
+        
+        self.column_vars = {}
+        
+        cols_grid = tk.Frame(columns_box, bg='#e3f2fd')
+        cols_grid.pack(fill=tk.X, padx=20, pady=(0, 15))
+        
+        col_count = 0
+        row_count = 0
+        for col in self.columns:
+            if col and col not in self.phone_columns:
+                var = tk.BooleanVar(value=False)
+                self.column_vars[col] = var
+                
+                cb = tk.Checkbutton(cols_grid, text=col, variable=var,
+                                   font=('Inter', 10),
+                                   bg='#e3f2fd', fg='#0d47a1',
+                                   selectcolor='#e3f2fd',
+                                   activebackground='#e3f2fd')
+                cb.grid(row=row_count, column=col_count, sticky='w', padx=10, pady=4)
+                
+                col_count += 1
+                if col_count >= 3:
+                    col_count = 0
+                    row_count += 1
+        
+        def toggle_step3(event=None):
+            if step3_content.winfo_ismapped():
+                step3_content.pack_forget()
+                step3_arrow.config(text="▼")
+            else:
+                step3_content.pack(fill=tk.X, pady=(0, 0), after=step3_toggle)
+                step3_arrow.config(text="▲")
+            canvas.update_idletasks()
+            canvas.configure(scrollregion=canvas.bbox("all"))
+            return "break"
+        
+        step3_toggle.bind('<Button-1>', toggle_step3)
+        for widget in step3_header_inner.winfo_children():
+            widget.bind('<Button-1>', toggle_step3)
+        
+        tk.Frame(step3, bg='#e0e0e0', height=2).pack(fill=tk.X, pady=15)
+        
+        # PASO 4: Mensaje (desplegable mejorado)
+        step4 = tk.Frame(scrollable_frame, bg='white')
+        step4.pack(fill=tk.X, padx=30, pady=10)
+        
+        step4_toggle = tk.Frame(step4, bg='#f5f5f5', relief=tk.FLAT, bd=0, cursor='hand2')
+        step4_toggle.pack(fill=tk.X)
+        
+        step4_header_inner = tk.Frame(step4_toggle, bg='#f5f5f5')
+        step4_header_inner.pack(fill=tk.X, padx=15, pady=12)
+        
+        tk.Label(step4_header_inner, text="3", font=('Inter', 18, 'bold'),
+                bg='#e8eaed', fg='#202124', width=2, height=1).pack(side=tk.LEFT, padx=(0, 12))
+        
+        tk.Label(step4_header_inner, text="Plantilla de Mensaje",
+                font=('Inter', 14, 'bold'),
+                bg='#f5f5f5', fg=self.colors['text']).pack(side=tk.LEFT)
+        
+        step4_arrow = tk.Label(step4_header_inner, text="▼", font=('Inter', 16, 'bold'),
+                              bg='#f5f5f5', fg=self.colors['blue'])
+        step4_arrow.pack(side=tk.RIGHT, padx=10)
+        
+        step4_content = tk.Frame(step4, bg='white')
+        
+        message_box = tk.Frame(step4_content, bg='#f0f8ff', relief=tk.SOLID, bd=1)
+        message_box.pack(fill=tk.X, pady=(10, 10))
+        
+        tk.Label(message_box, text="Escribe tu mensaje usando {NombreColumna} para insertar valores:",
+                font=('Inter', 11),
+                bg='#f0f8ff', fg='#0d47a1').pack(anchor='w', padx=20, pady=(15, 10))
+        
+        buttons_frame = tk.Frame(message_box, bg='#f0f8ff')
+        buttons_frame.pack(fill=tk.X, padx=20, pady=(0, 10))
+        
+        tk.Label(buttons_frame, text="Haz clic para insertar:",
+                font=('Inter', 10, 'italic'),
+                bg='#f0f8ff', fg='#666').pack(anchor='w', pady=(0, 5))
+        
+        buttons_container = tk.Frame(buttons_frame, bg='#f0f8ff')
+        buttons_container.pack(fill=tk.X)
+        
+        message_text = scrolledtext.ScrolledText(message_box, height=6, 
+                                                 font=('Inter', 11),
+                                                 relief=tk.SOLID, bd=1, wrap=tk.WORD)
+        message_text.pack(fill=tk.BOTH, padx=20, pady=(10, 10))
+        
+        # PREVISUALIZACIÓN EN TIEMPO REAL
+        preview_frame = tk.Frame(message_box, bg='#fff3cd', relief=tk.SOLID, bd=1)
+        preview_frame.pack(fill=tk.BOTH, padx=20, pady=(10, 15))
+        
+        tk.Label(preview_frame, text="👁️ Previsualización del mensaje:",
+                font=('Inter', 10, 'bold'),
+                bg='#fff3cd', fg='#856404').pack(anchor='w', padx=10, pady=(8, 5))
+        
+        preview_text = tk.Text(preview_frame, height=4, 
+                              font=('Inter', 10),
+                              bg='#fffbf0', fg='#333',
+                              relief=tk.FLAT, wrap=tk.WORD,
+                              state=tk.DISABLED)
+        preview_text.pack(fill=tk.BOTH, padx=10, pady=(0, 8))
+        
+        def update_preview(*args):
+            try:
+                # Obtener el mensaje actual
+                current_message = message_text.get('1.0', tk.END).strip()
+                
+                if not current_message:
+                    preview_text.config(state=tk.NORMAL)
+                    preview_text.delete('1.0', tk.END)
+                    preview_text.insert('1.0', '(Escribe tu mensaje arriba para ver la previsualización)')
+                    preview_text.config(state=tk.DISABLED)
+                    return
+                
+                # Usar la primera fila de datos como ejemplo
+                if self.raw_data:
+                    example_row = self.raw_data[0]
+                    preview_message = current_message
+                    
+                    # Reemplazar cada placeholder con datos reales
+                    for col in self.columns:
+                        placeholder = f"{{{col}}}"
+                        if placeholder in preview_message:
+                            value = example_row.get(col, '')
+                            if value is None:
+                                value = ''
+                            
+                            # Formatear como peso si es necesario
+                            if '$ Hist.' in col or '$ Asig.' in col:
+                                try:
+                                    num_value = float(str(value).replace(',', '').replace('$', '').strip())
+                                    value = f"${num_value:,.2f}"
+                                except:
+                                    value = str(value)
+                            else:
+                                value = str(value)
+                            
+                            preview_message = preview_message.replace(placeholder, value)
+                    
+                    preview_text.config(state=tk.NORMAL)
+                    preview_text.delete('1.0', tk.END)
+                    preview_text.insert('1.0', preview_message)
+                    preview_text.config(state=tk.DISABLED)
+                else:
+                    preview_text.config(state=tk.NORMAL)
+                    preview_text.delete('1.0', tk.END)
+                    preview_text.insert('1.0', '(No hay datos para previsualizar)')
+                    preview_text.config(state=tk.DISABLED)
+            except Exception as e:
+                pass
+        
+        # Actualizar previsualización cuando cambia el texto
+        message_text.bind('<KeyRelease>', update_preview)
+        message_text.bind('<ButtonRelease>', update_preview)
+        
+        # Previsualización inicial
+        update_preview()
+        
+        def update_buttons():
+            for widget in buttons_container.winfo_children():
+                widget.destroy()
+            
+            selected = [col for col, var in self.column_vars.items() if var.get()]
+            
+            if not selected:
+                tk.Label(buttons_container, text="(Selecciona columnas en el Paso 3)",
+                        font=('Inter', 10, 'italic'),
+                        bg='#f0f8ff', fg='#999').pack(anchor='w')
+                return
+            
+            def insert_field(field_name):
+                message_text.insert(tk.INSERT, f"{{{field_name}}}")
+                message_text.focus()
+            
+            btn_col = 0
+            btn_row = 0
+            for col in selected:
+                btn = tk.Button(buttons_container, text=col,
+                               command=lambda c=col: insert_field(c),
+                               bg=self.colors['blue'], fg='white',
+                               font=('Inter', 9, 'bold'),
+                               relief=tk.FLAT, cursor='hand2',
+                               padx=12, pady=6)
+                btn.grid(row=btn_row, column=btn_col, padx=3, pady=3, sticky='ew')
+                
+                btn_col += 1
+                if btn_col >= 4:
+                    btn_col = 0
+                    btn_row += 1
+        
+        for var in self.column_vars.values():
+            var.trace('w', lambda *args: update_buttons())
+        
+        update_buttons()
+        
+        def toggle_step4(event=None):
+            if step4_content.winfo_ismapped():
+                step4_content.pack_forget()
+                step4_arrow.config(text="▼")
+            else:
+                step4_content.pack(fill=tk.X, pady=(0, 0), after=step4_toggle)
+                step4_arrow.config(text="▲")
+            canvas.update_idletasks()
+            canvas.configure(scrollregion=canvas.bbox("all"))
+            return "break"
+        
+        step4_toggle.bind('<Button-1>', toggle_step4)
+        for widget in step4_header_inner.winfo_children():
+            widget.bind('<Button-1>', toggle_step4)
+        
+        # Botones finales
+        button_frame = tk.Frame(scrollable_frame, bg='white')
+        button_frame.pack(fill=tk.X, padx=30, pady=(20, 30))
+        
+        def process_and_close():
+            selected_phones = [col for col, var in self.phone_vars.items() if var.get()]
+            
+            if not selected_phones:
+                messagebox.showwarning("Advertencia", "Selecciona al menos una columna de teléfono")
+                return
+            
+            selected = [col for col, var in self.column_vars.items() if var.get()]
+            
+            if not selected:
+                messagebox.showwarning("Advertencia", "Selecciona al menos una columna para el mensaje")
+                return
+            
+            message_template = message_text.get("1.0", tk.END).strip()
+            
+            if not message_template:
+                messagebox.showwarning("Advertencia", "Escribe una plantilla de mensaje")
+                return
+            
+            self.log("⚙️ Procesando datos...", 'info')
+            self.process_excel_data(selected, message_template, selected_phones)
+            
+            proc_window.destroy()
+        
+        btn_process = tk.Button(button_frame, text="✓ Procesar y Generar URLs",
+                 command=process_and_close,
+                 bg=self.colors['green'], fg='white',
+                 font=('Inter', 13, 'bold'),
+                 relief=tk.FLAT, cursor='hand2',
+                 activebackground='#17A34A',
+                 padx=30, pady=15)
+        btn_process.pack(side=tk.LEFT, padx=5)
+        
+        btn_cancel = tk.Button(button_frame, text="✗ Cancelar",
+                 command=proc_window.destroy,
+                 bg='#EA4335', fg='white',
+                 font=('Inter', 13, 'bold'),
+                 relief=tk.FLAT, cursor='hand2',
+                 activebackground='#D33426',
+                 padx=30, pady=15)
+        btn_cancel.pack(side=tk.LEFT, padx=5)
+        
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+    
+    def process_excel_data(self, selected_columns, message_template, selected_phones):
+        """Procesar datos y generar URLs"""
+        processed_rows = []
+        
+        for row in self.raw_data:
+            phone_numbers = []
+            
+            for phone_col in selected_phones:
+                phone_value = str(row.get(phone_col, '')) if row.get(phone_col) else ''
+                numbers = [num.strip() for num in phone_value.split('-') if num.strip()]
+                phone_numbers.extend(numbers)
+            
+            if not phone_numbers:
+                continue
+            
+            for phone in phone_numbers:
+                if phone and phone.strip():
+                    message = message_template
+                    for col in selected_columns:
+                        placeholder = f"{{{col}}}"
+                        value = row.get(col, '')
+                        if value is None:
+                            value = ''
+                        
+                        # Formatear como peso si la columna contiene "$ Hist." o "$ Asig."
+                        if '$ Hist.' in col or '$ Asig.' in col:
+                            try:
+                                # Convertir a número y formatear como peso
+                                num_value = float(str(value).replace(',', '').replace('$', '').strip())
+                                value = f"${num_value:,.2f}"
+                            except:
+                                value = str(value)
+                        else:
+                            value = str(value)
+                        
+                        message = message.replace(placeholder, value)
+                    
+                    phone_clean = phone.strip()
+                    # Codificar mensaje preservando emojis (safe='' para codificar todo excepto caracteres seguros)
+                    encoded_message = urllib.parse.quote(message, safe='')
+                    whatsapp_url = f"https://wa.me/549{phone_clean}?text={encoded_message}"
+                    
+                    processed_rows.append(whatsapp_url)
+        
+        self.links = processed_rows
+        self.total_messages = len(self.links)
+        self.update_stats()
+        
+        self.log(f"✓ {len(self.links)} URLs de WhatsApp generados", 'success')
+        
+        self.save_processed_excel()
+    
+    def save_processed_excel(self):
+        """Guardar Excel con URLs"""
+        try:
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "URLs WhatsApp"
+            
+            ws['A1'] = 'URL'
+            
+            for idx, url in enumerate(self.links, start=2):
+                ws[f'A{idx}'] = url
+            
+            output_path = filedialog.asksaveasfilename(
+                defaultextension=".xlsx",
+                filetypes=[("Excel", "*.xlsx")],
+                title="Guardar Excel Procesado"
+            )
+            
+            if output_path:
+                wb.save(output_path)
+                self.log(f"✓ Excel guardado: {os.path.basename(output_path)}", 'success')
+                messagebox.showinfo("Éxito", f"Excel procesado guardado correctamente\n{len(self.links)} URLs listos para enviar")
+        
+        except Exception as e:
+            self.log(f"✗ Error al guardar Excel: {e}", 'error')
+            messagebox.showerror("Error", f"Error al guardar Excel: {e}")
+            
+    def start_sending(self):
+        """Iniciar envío"""
+        if not self.adb_path.get() or not os.path.exists(self.adb_path.get()):
+            messagebox.showerror("Error", "ADB no encontrado")
+            return
+        if not self.devices:
+            messagebox.showerror("Error", "Paso 1: Detecta dispositivos")
+            return
+        if not self.links:
+            messagebox.showerror("Error", "Paso 2: Carga y procesa Excel")
+            return
+        if self.is_running:
+            return
+            
+        if not messagebox.askyesno("Confirmar",
+            f"¿Iniciar envío de {len(self.links)} mensajes?"):
+            return
+            
+        self.is_running = True
+        self.is_paused = False
+        self.should_stop = False
+        self.sent_count = 0
+        self.failed_count = 0
+        self.current_index = 0
+        self.start_time = datetime.now()
+        
+        self.btn_start.config(state=tk.DISABLED)
+        self.btn_pause.config(state=tk.NORMAL)
+        self.btn_stop.config(state=tk.NORMAL)
+        
+        threading.Thread(target=self.send_thread, daemon=True).start()
+        
+    def pause_sending(self):
+        """Pausar/Reanudar"""
+        with self.pause_lock:
+            if self.is_paused:
+                self.is_paused = False
+                self.btn_pause.config(text="⏸  PAUSAR")
+                self.log("▶ Reanudado", 'success')
+            else:
+                self.is_paused = True
+                self.btn_pause.config(text="▶  REANUDAR")
+                self.log("⏸ Pausado", 'warning')
+                
+    def stop_sending(self):
+        """Cancelar"""
+        if messagebox.askyesno("Confirmar", "¿Cancelar el envío?"):
+            self.should_stop = True
+            self.log("⏹ Cancelando...", 'warning')
+            
+    def send_thread(self):
+        """Thread de envío"""
+        try:
+            self.log("═" * 50, 'info')
+            self.log("🚀 INICIANDO ENVÍO", 'success')
+            self.log("═" * 50, 'info')
+            
+            pkg = "com.whatsapp.w4b"
+            chrome = "com.android.chrome/com.google.android.apps.chrome.Main"
+            idx = 0
+            
+            for i, link in enumerate(self.links, 1):
+                while self.is_paused and not self.should_stop:
+                    time.sleep(0.1)
+                if self.should_stop:
+                    self.log("⚠ Envío cancelado", 'warning')
+                    break
+                    
+                self.current_index = i
+                device = self.devices[idx]
+                idx = (idx + 1) % len(self.devices)
+                
+                if self.send_msg(device, link, i, len(self.links), pkg, chrome):
+                    self.sent_count += 1
+                else:
+                    self.failed_count += 1
+                    
+                self.update_stats()
+                
+                if i < len(self.links) and not self.should_stop:
+                    delay = random.uniform(self.delay_min.get(),
+                                          self.delay_max.get())
+                    self.log(f"⏳ Esperando {delay:.1f}s...", 'info')
+                    
+                    elapsed = 0
+                    while elapsed < delay and not self.should_stop:
+                        while self.is_paused and not self.should_stop:
+                            time.sleep(0.1)
+                        time.sleep(0.1)
+                        elapsed += 0.1
+                        
+            self.log("═" * 50, 'info')
+            self.log("✅ ENVÍO FINALIZADO", 'success')
+            self.log(f"Enviados: {self.sent_count} | Fallidos: {self.failed_count}", 'info')
+            
+            messagebox.showinfo("Completado",
+                f"Enviados: {self.sent_count}\nFallidos: {self.failed_count}")
+        finally:
+            self.is_running = False
+            self.btn_start.config(state=tk.NORMAL)
+            self.btn_pause.config(state=tk.DISABLED)
+            self.btn_stop.config(state=tk.DISABLED)
+            
+    def send_msg(self, device, link, i, total, pkg, chrome):
+        """Enviar mensaje - Inyecta URL directamente"""
+        try:
+            num = link.split('wa.me/')[1].split('?')[0] if 'wa.me/' in link else "?"
+            self.log(f"📱 {i}/{total} → {num}", 'info')
+            
+            adb = self.adb_path.get()
+            
+            # Cerrar WhatsApp
+            subprocess.run([adb, '-s', device, 'shell', 'am', 'force-stop', pkg], 
+                          capture_output=True, timeout=10)
+            time.sleep(1)
+            
+            # Método 1: Abrir con intent directo (más confiable)
+            self.log("🔗 Inyectando URL...", 'info')
+            cmd = f'am start -a android.intent.action.VIEW -d "{link}"'
+            subprocess.run([adb, '-s', device, 'shell', cmd], 
+                          capture_output=True, timeout=10)
+            
+            time.sleep(self.wait_after_open.get())
+            
+            # Primer Enter (abrir chat)
+            subprocess.run([adb, '-s', device, 'shell', 'input', 'keyevent', '66'], 
+                          capture_output=True, timeout=10)
+            time.sleep(self.wait_after_first_enter.get())
+            
+            # Segundo Enter (enviar mensaje)
+            subprocess.run([adb, '-s', device, 'shell', 'input', 'keyevent', '66'], 
+                          capture_output=True, timeout=10)
+            time.sleep(1)
+            
+            self.log("✅ ENVIADO", 'success')
+            return True
+        except subprocess.TimeoutExpired:
+            self.log("❌ ERROR: Timeout", 'error')
+            return False
+        except Exception as e:
+            self.log(f"❌ ERROR: {e}", 'error')
+            return False
+
+
+def main():
+    root = tk.Tk()
+    Hermes(root)
+    root.mainloop()
+
+if __name__ == "__main__":
+    main()
+

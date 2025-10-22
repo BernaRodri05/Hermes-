@@ -1,0 +1,74 @@
+═══════════════════════════════════════════════════════════════
+                    HERMES V1 - INSTRUCCIONES
+═══════════════════════════════════════════════════════════════
+
+PASO 1: CREAR ACCESO DIRECTO
+─────────────────────────────────────────────────────────────
+
+1. Haz doble clic en: CREAR_ACCESO_DIRECTO.vbs
+
+2. Se creará un acceso directo llamado "HERMES V1.lnk" con el 
+   ícono de Python
+
+3. Puedes mover este acceso directo a tu escritorio o donde 
+   prefieras
+
+
+PASO 2: INSTALAR (SOLO LA PRIMERA VEZ)
+─────────────────────────────────────────────────────────────
+
+1. Entra a la carpeta "archivos"
+
+2. Ejecuta: INSTALAR.bat
+
+3. Espera a que se instalen todas las dependencias
+
+
+PASO 3: EJECUTAR HERMES
+─────────────────────────────────────────────────────────────
+
+Opción A: Usa el acceso directo "HERMES V1.lnk" que creaste
+
+Opción B: Entra a la carpeta "archivos" y ejecuta EJECUTAR.bat
+
+
+ESTRUCTURA DE ARCHIVOS
+─────────────────────────────────────────────────────────────
+
+📁 HERMES_V1_MODIFICADO/
+├── 🔧 CREAR_ACCESO_DIRECTO.vbs  (Ejecuta esto primero)
+├── 🖼️ python_icon.ico            (Ícono de Python)
+├── 🖼️ python_icon.png            (Ícono en PNG)
+├── 📄 LEEME - INSTRUCCIONES.txt  (Este archivo)
+│
+└── 📁 archivos/
+    ├── ▶️ EJECUTAR.bat           (Ejecuta HERMES)
+    ├── 🔧 INSTALAR.bat           (Instala dependencias)
+    ├── 🐍 Hermes.py              (Código principal)
+    ├── 🖼️ logo_left.png          (Logo izquierdo)
+    ├── 🖼️ logo_right.png         (Logo derecho)
+    ├── 📄 README.txt             (Documentación)
+    └── 📁 scrcpy-win64-v3.2/     (Herramientas ADB)
+
+
+NOTAS IMPORTANTES
+─────────────────────────────────────────────────────────────
+
+✓ El ícono de Python solo se verá en el acceso directo
+✓ Todos los archivos del programa están en la carpeta "archivos"
+✓ No elimines la carpeta "archivos" ni el archivo python_icon.ico
+✓ Si mueves el acceso directo, asegúrate de que siga apuntando
+  a la carpeta correcta
+
+
+SOPORTE
+─────────────────────────────────────────────────────────────
+
+Para más información, revisa los archivos README en la carpeta
+"archivos".
+
+═══════════════════════════════════════════════════════════════
+                        Versión: HERMES V1
+                    Fecha: 21 de octubre de 2025
+═══════════════════════════════════════════════════════════════
+

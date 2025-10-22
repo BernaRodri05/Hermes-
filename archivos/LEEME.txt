@@ -1,0 +1,162 @@
+========================================
+           HERMES - INSTRUCCIONES
+========================================
+
+IMPORTANTE: Sigue estos pasos EN ORDEN
+
+┌────────────────────────────────────────┐
+│  PASO 0: INSTALAR PYTHON (SI NO LO    │
+│          TIENES)                       │
+└────────────────────────────────────────┘
+
+Si al ejecutar INSTALAR.bat te dice que Python
+no está instalado, sigue estos pasos:
+
+1. Ve a: https://www.python.org/downloads/
+2. Descarga Python 3.11 o superior
+3. Ejecuta el instalador
+4. ⚠️ IMPORTANTE: Marca la casilla
+   "Add Python to PATH" durante la instalación
+5. Completa la instalación
+6. Reinicia la computadora
+7. Continúa con el PASO 1
+
+
+┌────────────────────────────────────────┐
+│  PASO 1: INSTALAR DEPENDENCIAS         │
+└────────────────────────────────────────┘
+
+Antes de usar Hermes por primera vez:
+
+1. Haz doble clic en: INSTALAR.bat
+2. Si Python está instalado, verás:
+   "Python detectado correctamente!"
+3. Espera a que termine la instalación
+4. Verás "Instalación completada!"
+5. Cierra la ventana
+
+NOTA: Solo necesitas hacer esto UNA VEZ en cada computadora
+
+
+┌────────────────────────────────────────┐
+│  PASO 2: EJECUTAR HERMES               │
+└────────────────────────────────────────┘
+
+Después de instalar las dependencias:
+
+1. Haz doble clic en: EJECUTAR.bat
+2. Se abrirá la interfaz de Hermes
+
+
+┌────────────────────────────────────────┐
+│  PASO 3: USAR HERMES                   │
+└────────────────────────────────────────┘
+
+En la interfaz de Hermes:
+
+1. Clic en "1 🔍 Detectar Dispositivos"
+   - Conecta tu teléfono por USB
+   - Activa depuración USB en el teléfono
+
+2. Clic en "2 📄 Cargar Excel"
+   - Selecciona tu archivo Excel
+   - Debe tener links de wa.me en la columna A
+
+3. Clic en "3 ▶ INICIAR ENVÍO"
+   - Confirma y comienza el envío automático
+
+
+┌────────────────────────────────────────┐
+│  SOLUCIÓN DE PROBLEMAS                 │
+└────────────────────────────────────────┘
+
+ERROR: "pip no se reconoce como comando"
+SOLUCIÓN: 
+  - Python no está instalado o no está en PATH
+  - Instala Python desde python.org
+  - IMPORTANTE: Marca "Add Python to PATH"
+  - Reinicia la computadora
+  - Ejecuta INSTALAR.bat nuevamente
+
+ERROR: "No module named 'openpyxl'"
+SOLUCIÓN: 
+  - Ejecuta INSTALAR.bat primero
+  - Asegúrate de que termine sin errores
+
+ERROR: "ADB no encontrado"
+SOLUCIÓN: 
+  - El ADB está incluido en scrcpy-win64-v3.2
+  - No muevas ni borres esa carpeta
+
+ERROR: "No se encontraron dispositivos"
+SOLUCIÓN: 
+  - Conecta el teléfono por USB
+  - Activa "Depuración USB" en opciones de desarrollador
+  - Acepta el permiso en el teléfono
+  - En el teléfono: Configuración > Opciones de desarrollador
+    > Depuración USB (activar)
+
+
+┌────────────────────────────────────────┐
+│  CÓMO ACTIVAR DEPURACIÓN USB           │
+└────────────────────────────────────────┘
+
+1. En tu teléfono Android:
+   - Ve a Configuración
+   - Busca "Acerca del teléfono"
+   - Toca 7 veces en "Número de compilación"
+   - Verás "Ahora eres desarrollador"
+
+2. Vuelve a Configuración:
+   - Busca "Opciones de desarrollador"
+   - Activa "Depuración USB"
+
+3. Conecta el teléfono a la PC:
+   - Aparecerá un mensaje en el teléfono
+   - Acepta "Permitir depuración USB"
+
+
+┌────────────────────────────────────────┐
+│  CONTENIDO DEL PAQUETE                 │
+└────────────────────────────────────────┘
+
+Hermes.py              - Programa principal
+logo.png               - Logo de Hermes
+INSTALAR.bat           - Instalador de dependencias
+EJECUTAR.bat           - Ejecutor del programa
+LEEME.txt              - Este archivo
+README.txt             - Documentación completa
+scrcpy-win64-v3.2/     - Carpeta con ADB (NO BORRAR)
+
+
+┌────────────────────────────────────────┐
+│  REQUISITOS                            │
+└────────────────────────────────────────┘
+
+✓ Windows 10/11
+✓ Python 3.7 o superior (descargar de python.org)
+✓ Conexión a internet (para instalar dependencias)
+✓ Teléfono Android con depuración USB activada
+✓ Cable USB para conectar el teléfono
+
+
+┌────────────────────────────────────────┐
+│  RESUMEN RÁPIDO                        │
+└────────────────────────────────────────┘
+
+Primera vez en una PC nueva:
+1. Instalar Python (si no lo tienes)
+2. Ejecutar INSTALAR.bat
+3. Ejecutar EJECUTAR.bat
+4. Seguir pasos 1, 2, 3 en la interfaz
+
+Usos posteriores:
+1. Ejecutar EJECUTAR.bat
+2. Seguir pasos 1, 2, 3 en la interfaz
+
+
+========================================
+   ¿Problemas? Revisa README.txt
+   o contacta al desarrollador
+========================================
+
