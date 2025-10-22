@@ -8,7 +8,7 @@ import subprocess
 import time
 import random
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox, scrolledtext
+from tkinter import ttk, filedialog, messagebox, scrolledtext, simpledialog
 import os
 import threading
 from datetime import datetime, timedelta
@@ -74,12 +74,19 @@ class Hermes:
         self.manual_messages = []
         self.manual_mode = False
         self.manual_loops = 1
-        
+
         # Variables del procesador
         self.raw_data = []
         self.columns = []
         self.selected_columns = []
         self.phone_columns = []
+
+        # Fidelizado
+        self.fidelizado_unlocked = False
+        self.fidelizado_wrapper = None
+        self.fidelizado_shadow = None
+        self.fidelizado_trigger = None
+        self.fidelizado_unlock_btn = None
         
         # Colores de Hermes
         self.colors = {
@@ -219,6 +226,38 @@ class Hermes:
         tk.Label(actions_title, text="Acciones",
                 font=('Inter', 16, 'bold'),
                 bg=self.colors['bg'], fg='#000000').pack(side=tk.LEFT)
+
+        unlock_wrapper = tk.Frame(actions_title, bg=self.colors['bg'])
+        unlock_wrapper.pack(side=tk.LEFT, padx=(12, 0))
+
+        unlock_shadow = tk.Frame(unlock_wrapper, bg='#d0d4dc', bd=0)
+        unlock_shadow.place(x=1, y=2)
+
+        unlock_button_container = tk.Frame(unlock_wrapper, bg='#f7f9fc', bd=0)
+        unlock_button_container.pack()
+
+        def _sync_unlock_shadow(event):
+            unlock_shadow.place_configure(width=event.width, height=event.height)
+
+        unlock_button_container.bind("<Configure>", _sync_unlock_shadow)
+        unlock_shadow.lower()
+
+        self.fidelizado_unlock_btn = tk.Button(
+            unlock_button_container,
+            text="🔒",
+            command=self.request_fidelizado_access,
+            bg=self.colors['orange'], fg='#000000',
+            font=('Inter', 11, 'bold'),
+            relief=tk.RAISED, cursor='hand2',
+            activebackground='#e3a10b',
+            bd=2,
+            padx=6,
+            pady=2,
+            highlightthickness=1,
+            highlightbackground='#b27d0a',
+            highlightcolor='#b27d0a'
+        )
+        self.fidelizado_unlock_btn.pack()
         
         tk.Frame(parent, bg='#e0e0e0', height=1).pack(fill=tk.X, pady=(0, 25))
         
@@ -299,6 +338,12 @@ class Hermes:
             highlightcolor='#b27d0a'
         )
         self.fidelizado_trigger.pack(fill=tk.X, ipady=12)
+
+        self.fidelizado_trigger.configure(state=tk.DISABLED)
+        secret_trigger_wrapper.pack_forget()
+
+        self.fidelizado_wrapper = secret_trigger_wrapper
+        self.fidelizado_shadow = shadow_frame
 
         # Botón 3
         btn3_container = tk.Frame(actions, bg=self.colors['bg'])
@@ -666,8 +711,48 @@ class Hermes:
             self.log(f"✗ Error al leer archivo: {e}", 'error')
             messagebox.showerror("Error", f"Error al leer archivo: {e}")
 
+    def _show_fidelizado_trigger(self):
+        """Mostrar el botón Fidelizado respetando la sombra"""
+        if self.fidelizado_wrapper and not self.fidelizado_wrapper.winfo_manager():
+            self.fidelizado_wrapper.pack(fill=tk.X, padx=(48, 0))
+        if self.fidelizado_shadow:
+            self.fidelizado_shadow.lower()
+
+    def request_fidelizado_access(self):
+        """Solicitar acceso protegido para Fidelizado"""
+        if self.fidelizado_unlocked:
+            self._show_fidelizado_trigger()
+            if self.fidelizado_trigger:
+                self.fidelizado_trigger.configure(state=tk.NORMAL)
+            if hasattr(self, 'fidelizado_unlock_btn') and self.fidelizado_unlock_btn:
+                self.fidelizado_unlock_btn.configure(text="🔓")
+            return
+
+        password = simpledialog.askstring(
+            "Acceso Fidelizado",
+            "Ingresa la contraseña de Fidelizado:",
+            parent=self.root,
+            show="*"
+        )
+
+        if password is None:
+            return
+
+        if password != "feli2109":
+            messagebox.showerror("-beta-", "Contraseña incorrecta")
+            return
+
+        self.fidelizado_unlocked = True
+        if self.fidelizado_trigger:
+            self.fidelizado_trigger.configure(state=tk.NORMAL)
+        if hasattr(self, 'fidelizado_unlock_btn') and self.fidelizado_unlock_btn:
+            self.fidelizado_unlock_btn.configure(text="🔓")
+        self._show_fidelizado_trigger()
+
     def handle_fidelizado_access(self):
         """Acceso unificado a la ventana de Fidelizado"""
+        if not self.fidelizado_unlocked:
+            return
         self.open_manual_input_window()
 
     def open_manual_input_window(self):
