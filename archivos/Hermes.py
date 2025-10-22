@@ -68,6 +68,12 @@ class Hermes:
         self.failed_count = 0
         self.current_index = 0
         self.start_time = None
+
+        # Datos manuales
+        self.manual_numbers = []
+        self.manual_messages = []
+        self.manual_mode = False
+        self.manual_loops = 1
         
         # Variables del procesador
         self.raw_data = []
@@ -259,12 +265,32 @@ class Hermes:
                                  activebackground='#17A34A',
                                  bd= 2, highlightthickness=0, highlightbackground='#1a56c7')
         self.btn_load.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=15)
-        
-        # Botón 3
+
+        # Botón Lista Manual
+        btn_manual_container = tk.Frame(actions, bg=self.colors['bg'])
+        btn_manual_container.pack(fill=tk.X, pady=(0, 15))
+
+        num_manual = tk.Label(btn_manual_container, text="3",
+                              font=('Inter', 20, 'bold'),
+                              bg='#e8eaed', fg=self.colors['text'],
+                              width=3, height=1)
+        num_manual.pack(side=tk.LEFT, padx=(0, 15))
+
+        self.btn_manual = tk.Button(btn_manual_container,
+                                    text="📱  Lista manual",
+                                    command=self.open_manual_input_window,
+                                    bg=self.colors['orange'], fg='#000000',
+                                    font=('Inter', 13, 'bold'),
+                                    relief=tk.SOLID, cursor='hand2',
+                                    activebackground='#e3a10b',
+                                    bd=2, highlightthickness=0, highlightbackground='#c57f00')
+        self.btn_manual.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=15)
+
+        # Botón 4
         btn3_container = tk.Frame(actions, bg=self.colors['bg'])
         btn3_container.pack(fill=tk.X, pady=(0, 25))
-        
-        num3 = tk.Label(btn3_container, text="3",
+
+        num3 = tk.Label(btn3_container, text="4",
                        font=('Inter', 20, 'bold'),
                        bg='#e8eaed', fg=self.colors['text'],
                        width=3, height=1)
@@ -394,7 +420,7 @@ class Hermes:
         self.log_text.tag_config('info', foreground='#00d9ff')
         
         self.log("✓ HERMES V1 iniciado", 'success')
-        self.log("ℹ Sigue los pasos 1, 2 y 3", 'info')
+        self.log("ℹ Sigue los pasos 1, 2, 3 y 4", 'info')
         self.log("✓ ADB detectado", 'success')
         
     def create_stat(self, parent, label, value, color, col):
@@ -576,7 +602,9 @@ class Hermes:
     def load_and_process_excel(self):
         """Cargar y procesar Excel/CSV"""
         self.log("📂 Seleccionando archivo...", 'info')
-        
+
+        self.manual_mode = False
+
         file_path = filedialog.askopenfilename(
             title="Seleccionar Excel o CSV",
             filetypes=[("Excel", "*.xlsx *.xls"), ("CSV", "*.csv"), ("Todos", "*.*")]
@@ -623,7 +651,212 @@ class Hermes:
         except Exception as e:
             self.log(f"✗ Error al leer archivo: {e}", 'error')
             messagebox.showerror("Error", f"Error al leer archivo: {e}")
-    
+
+    def open_manual_input_window(self):
+        """Ventana para ingresar números y mensajes manuales"""
+        manual_window = tk.Toplevel(self.root)
+        manual_window.title("HERMES V1 - Lista manual")
+        manual_window.geometry("700x650")
+        manual_window.configure(bg=self.colors['bg'])
+        manual_window.transient(self.root)
+        manual_window.grab_set()
+
+        content = tk.Frame(manual_window, bg='white', bd=0, relief=tk.FLAT)
+        content.pack(fill=tk.BOTH, expand=True, padx=30, pady=30)
+
+        header = tk.Label(content,
+                          text="📱 Carga manual de números y mensajes",
+                          font=('Inter', 18, 'bold'),
+                          bg='white', fg=self.colors['text'])
+        header.pack(anchor='w', pady=(0, 20))
+
+        numbers_frame = tk.Frame(content, bg='white')
+        numbers_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 20))
+
+        tk.Label(numbers_frame,
+                 text="Pega los números (uno por línea, sin prefijo +549):",
+                 font=('Inter', 11, 'bold'),
+                 bg='white', fg=self.colors['text']).pack(anchor='w', pady=(0, 8))
+
+        numbers_text = scrolledtext.ScrolledText(numbers_frame,
+                                                 height=12,
+                                                 font=('Inter', 11),
+                                                 relief=tk.SOLID,
+                                                 bd=1,
+                                                 wrap=tk.WORD)
+        numbers_text.pack(fill=tk.BOTH, expand=True)
+        numbers_text.focus_set()
+
+        if self.manual_numbers:
+            numbers_text.insert('1.0', "\n".join(self.manual_numbers))
+
+        controls_frame = tk.Frame(content, bg='white')
+        controls_frame.pack(fill=tk.X, pady=(0, 20))
+
+        loops_var = tk.IntVar(value=max(1, self.manual_loops))
+
+        loops_container = tk.Frame(controls_frame, bg='white')
+        loops_container.pack(side=tk.LEFT, anchor='w')
+
+        tk.Label(loops_container,
+                 text="Repetir bucle de números:",
+                 font=('Inter', 11, 'bold'),
+                 bg='white', fg=self.colors['text']).pack(anchor='w')
+
+        try:
+            loops_input = ttk.Spinbox(loops_container, from_=1, to=9999,
+                                      textvariable=loops_var, width=10, justify='center')
+        except AttributeError:
+            loops_input = tk.Spinbox(loops_container, from_=1, to=9999,
+                                     textvariable=loops_var, width=10, justify='center')
+        loops_input.pack(anchor='w', pady=(6, 0))
+
+        message_controls = tk.Frame(controls_frame, bg='white')
+        message_controls.pack(side=tk.RIGHT, anchor='e')
+
+        messages_count_var = tk.StringVar()
+        if self.manual_messages:
+            messages_count_var.set(f"{len(self.manual_messages)} mensajes cargados")
+        else:
+            messages_count_var.set("0 mensajes cargados")
+
+        def load_messages_from_file():
+            file_path = filedialog.askopenfilename(
+                title="Seleccionar archivo de mensajes (.txt)",
+                filetypes=[("Texto", "*.txt"), ("Todos", "*.*")]
+            )
+
+            if not file_path:
+                return
+
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    lines = [line.strip() for line in f.read().splitlines() if line.strip()]
+
+                if not lines:
+                    messagebox.showerror("Error", "El archivo no contiene mensajes válidos.")
+                    return
+
+                self.manual_messages = lines
+                messages_count_var.set(f"{len(self.manual_messages)} mensajes cargados")
+                self.log(f"✓ {len(self.manual_messages)} mensajes manuales cargados", 'success')
+
+            except Exception as e:
+                messagebox.showerror("Error", f"No se pudo leer el archivo: {e}")
+
+        ttk.Button(message_controls,
+                   text="📂 Cargar mensajes (.txt)",
+                   command=load_messages_from_file).pack(anchor='e')
+
+        tk.Label(message_controls,
+                 textvariable=messages_count_var,
+                 font=('Inter', 10),
+                 bg='white', fg=self.colors['text_light']).pack(anchor='e', pady=(6, 0))
+
+        buttons_frame = tk.Frame(content, bg='white')
+        buttons_frame.pack(fill=tk.X, pady=(10, 0))
+
+        def close_window():
+            manual_window.grab_release()
+            manual_window.destroy()
+
+        manual_window.protocol("WM_DELETE_WINDOW", close_window)
+
+        def confirm_manual_data():
+            raw_numbers = numbers_text.get('1.0', tk.END).splitlines()
+            cleaned_numbers = []
+
+            for raw in raw_numbers:
+                stripped = raw.strip()
+                if not stripped:
+                    continue
+
+                normalized = ''.join(stripped.split())
+
+                if normalized.startswith('+549'):
+                    messagebox.showerror("Error", "Los números no deben incluir el prefijo +549.")
+                    return
+
+                if normalized.startswith('+'):
+                    normalized = normalized[1:]
+
+                if not normalized.isdigit():
+                    messagebox.showerror("Error", f"Número inválido: {stripped}")
+                    return
+
+                cleaned_numbers.append(normalized)
+
+            if not cleaned_numbers:
+                messagebox.showerror("Error", "Ingresa al menos un número válido.")
+                return
+
+            if not self.manual_messages:
+                messagebox.showerror("Error", "Carga un archivo .txt con los mensajes a enviar.")
+                return
+
+            try:
+                loops_value = int(loops_var.get())
+            except (TypeError, ValueError, tk.TclError):
+                loops_value = 1
+
+            if loops_value < 1:
+                loops_value = 1
+
+            links = self.generate_manual_links(cleaned_numbers, self.manual_messages, loops_value)
+
+            if not links:
+                messagebox.showerror("Error", "No se pudieron generar enlaces con los datos proporcionados.")
+                return
+
+            self.manual_numbers = cleaned_numbers
+            self.manual_loops = loops_value
+            self.links = links
+            self.manual_mode = True
+            self.total_messages = len(self.links)
+            self.update_stats()
+
+            self.log(
+                f"✓ Lista manual cargada: {len(self.manual_numbers)} números, "
+                f"{len(self.manual_messages)} mensajes, {len(self.links)} URLs generadas",
+                'success'
+            )
+
+            messagebox.showinfo("Lista manual",
+                                f"Se generaron {len(self.links)} mensajes a partir de la lista manual.")
+
+            close_window()
+
+        ttk.Button(buttons_frame, text="Cancelar", command=close_window).pack(side=tk.RIGHT, padx=(10, 0))
+        ttk.Button(buttons_frame, text="Generar enlaces", command=confirm_manual_data).pack(side=tk.RIGHT)
+
+    def generate_manual_links(self, numbers, messages, loops):
+        """Generar URLs de WhatsApp a partir de números y mensajes manuales"""
+        if not numbers or not messages:
+            return []
+
+        count = len(numbers)
+        base_sequence = []
+        for number in numbers:
+            base_sequence.extend([number] * count)
+
+        if not base_sequence:
+            return []
+
+        loops = max(1, loops)
+        total_messages = len(messages)
+        block_size = len(base_sequence)
+        required_repeats = -(-total_messages // block_size)
+        repeats = max(loops, required_repeats)
+
+        full_sequence = (base_sequence * repeats)[:total_messages]
+
+        links = []
+        for number, message in zip(full_sequence, messages):
+            encoded_message = urllib.parse.quote(message, safe='')
+            links.append(f"https://wa.me/549{number}?text={encoded_message}")
+
+        return links
+
     def open_processor_window(self, original_file):
         """Ventana de configuración con colores y tipografía de Hermes"""
         proc_window = tk.Toplevel(self.root)
@@ -1114,10 +1347,11 @@ class Hermes:
         self.links = processed_rows
         self.total_messages = len(self.links)
         self.update_stats()
-        
+
         self.log(f"✓ {len(self.links)} URLs de WhatsApp generados", 'success')
-        
-        self.save_processed_excel()
+
+        if not self.manual_mode:
+            self.save_processed_excel()
     
     def save_processed_excel(self):
         """Guardar Excel con URLs"""
@@ -1155,7 +1389,7 @@ class Hermes:
             messagebox.showerror("Error", "Paso 1: Detecta dispositivos")
             return
         if not self.links:
-            messagebox.showerror("Error", "Paso 2: Carga y procesa Excel")
+            messagebox.showerror("Error", "Pasos 2/3: Carga datos desde Excel o lista manual")
             return
         if self.is_running:
             return
