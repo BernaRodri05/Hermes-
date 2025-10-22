@@ -1202,11 +1202,31 @@ class Hermes:
             self.log("═" * 50, 'info')
             self.log("🚀 INICIANDO ENVÍO", 'success')
             self.log("═" * 50, 'info')
-            
+
             pkg = "com.whatsapp.w4b"
             chrome = "com.android.chrome/com.google.android.apps.chrome.Main"
             idx = 0
-            
+
+            for device in self.devices:
+                if self.should_stop:
+                    break
+                self.close_all_apps(device)
+
+            if self.should_stop:
+                self.log("⚠ Envío cancelado", 'warning')
+                return
+
+            self.log("🕒 Esperando 3s antes de iniciar el envío...", 'info')
+            while self.is_paused and not self.should_stop:
+                time.sleep(0.1)
+            if self.should_stop:
+                self.log("⚠ Envío cancelado", 'warning')
+                return
+            time.sleep(3)
+            if self.should_stop:
+                self.log("⚠ Envío cancelado", 'warning')
+                return
+
             for i, link in enumerate(self.links, 1):
                 while self.is_paused and not self.should_stop:
                     time.sleep(0.1)
@@ -1248,7 +1268,7 @@ class Hermes:
             self.btn_start.config(state=tk.NORMAL)
             self.btn_pause.config(state=tk.DISABLED)
             self.btn_stop.config(state=tk.DISABLED)
-            
+
     def send_msg(self, device, link, i, total, pkg, chrome):
         """Enviar mensaje - Abre Google e inyecta URL"""
         try:
@@ -1290,6 +1310,57 @@ class Hermes:
         except Exception as e:
             self.log(f"❌ ERROR: {e}", 'error')
             return False
+
+    def close_all_apps(self, device):
+        """Cerrar aplicaciones antes de iniciar el envío"""
+        adb = self.adb_path.get()
+        if not adb:
+            self.log("⚠ No se puede cerrar apps: ADB no configurado", 'warning')
+            return
+
+        self.log(f"🧹 Cerrando aplicaciones en {device}...", 'info')
+
+        try:
+            result = subprocess.run(
+                [adb, '-s', device, 'shell', 'am', 'kill-all'],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            if result.returncode == 0:
+                self.log(f"✅ am kill-all ejecutado en {device}", 'success')
+            else:
+                error_msg = result.stderr.strip() or result.stdout.strip() or "Error desconocido"
+                self.log(f"⚠ No se pudo ejecutar kill-all en {device}: {error_msg}", 'warning')
+        except subprocess.TimeoutExpired:
+            self.log(f"❌ Timeout al cerrar apps en {device} con kill-all", 'error')
+            return
+        except Exception as exc:
+            self.log(f"❌ Error al cerrar apps en {device}: {exc}", 'error')
+            return
+
+        packages = [
+            "com.whatsapp.w4b",
+            "com.whatsapp",
+            "com.android.chrome",
+            "com.google.android.googlequicksearchbox",
+        ]
+
+        for package in packages:
+            try:
+                result = subprocess.run(
+                    [adb, '-s', device, 'shell', 'am', 'force-stop', package],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                if result.returncode != 0:
+                    error_msg = result.stderr.strip() or result.stdout.strip() or "Error desconocido"
+                    self.log(f"⚠ No se pudo cerrar {package} en {device}: {error_msg}", 'warning')
+            except subprocess.TimeoutExpired:
+                self.log(f"❌ Timeout al forzar cierre de {package} en {device}", 'error')
+            except Exception as exc:
+                self.log(f"❌ Error al forzar cierre de {package} en {device}: {exc}", 'error')
 
 
 def main():
