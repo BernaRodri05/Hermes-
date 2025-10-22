@@ -266,31 +266,28 @@ class Hermes:
                                  bd= 2, highlightthickness=0, highlightbackground='#1a56c7')
         self.btn_load.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=15)
 
-        # Botón Lista Manual
-        btn_manual_container = tk.Frame(actions, bg=self.colors['bg'])
-        btn_manual_container.pack(fill=tk.X, pady=(0, 15))
+        # Sección Fidelizado
+        fidelizado_section = tk.Frame(actions, bg=self.colors['bg'])
+        fidelizado_section.pack(fill=tk.X, pady=(0, 20))
 
-        num_manual = tk.Label(btn_manual_container, text="3",
-                              font=('Inter', 20, 'bold'),
-                              bg='#e8eaed', fg=self.colors['text'],
-                              width=3, height=1)
-        num_manual.pack(side=tk.LEFT, padx=(0, 15))
+        fidelizado_container = tk.Frame(fidelizado_section, bg='#f1f3f4', bd=1, relief=tk.SOLID)
+        fidelizado_container.pack(fill=tk.X, padx=(48, 0))
 
-        self.btn_manual = tk.Button(btn_manual_container,
-                                    text="📱  Lista manual",
+        self.btn_manual = tk.Button(fidelizado_container,
+                                    text="📱  Fidelizado",
                                     command=self.open_manual_input_window,
                                     bg=self.colors['orange'], fg='#000000',
                                     font=('Inter', 13, 'bold'),
                                     relief=tk.SOLID, cursor='hand2',
                                     activebackground='#e3a10b',
-                                    bd=2, highlightthickness=0, highlightbackground='#c57f00')
-        self.btn_manual.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=15)
+                                    bd=0, highlightthickness=0)
+        self.btn_manual.pack(fill=tk.X, ipady=12, padx=12, pady=12)
 
-        # Botón 4
+        # Botón 3
         btn3_container = tk.Frame(actions, bg=self.colors['bg'])
         btn3_container.pack(fill=tk.X, pady=(0, 25))
 
-        num3 = tk.Label(btn3_container, text="4",
+        num3 = tk.Label(btn3_container, text="3",
                        font=('Inter', 20, 'bold'),
                        bg='#e8eaed', fg=self.colors['text'],
                        width=3, height=1)
@@ -653,9 +650,9 @@ class Hermes:
             messagebox.showerror("Error", f"Error al leer archivo: {e}")
 
     def open_manual_input_window(self):
-        """Ventana para ingresar números y mensajes manuales"""
+        """Ventana para ingresar números y mensajes Fidelizado"""
         manual_window = tk.Toplevel(self.root)
-        manual_window.title("HERMES V1 - Lista manual")
+        manual_window.title("HERMES V1 - Fidelizado")
         manual_window.geometry("700x650")
         manual_window.configure(bg=self.colors['bg'])
         manual_window.transient(self.root)
@@ -665,7 +662,7 @@ class Hermes:
         content.pack(fill=tk.BOTH, expand=True, padx=30, pady=30)
 
         header = tk.Label(content,
-                          text="📱 Carga manual de números y mensajes",
+                          text="📱 Fidelizado: carga de números y mensajes",
                           font=('Inter', 18, 'bold'),
                           bg='white', fg=self.colors['text'])
         header.pack(anchor='w', pady=(0, 20))
@@ -739,7 +736,7 @@ class Hermes:
 
                 self.manual_messages = lines
                 messages_count_var.set(f"{len(self.manual_messages)} mensajes cargados")
-                self.log(f"✓ {len(self.manual_messages)} mensajes manuales cargados", 'success')
+                self.log(f"✓ {len(self.manual_messages)} mensajes Fidelizado cargados", 'success')
 
             except Exception as e:
                 messagebox.showerror("Error", f"No se pudo leer el archivo: {e}")
@@ -816,13 +813,13 @@ class Hermes:
             self.update_stats()
 
             self.log(
-                f"✓ Lista manual cargada: {len(self.manual_numbers)} números, "
+                f"✓ Lista Fidelizado cargada: {len(self.manual_numbers)} números, "
                 f"{len(self.manual_messages)} mensajes, {len(self.links)} URLs generadas",
                 'success'
             )
 
-            messagebox.showinfo("Lista manual",
-                                f"Se generaron {len(self.links)} mensajes a partir de la lista manual.")
+            messagebox.showinfo("Lista Fidelizado",
+                                f"Se generaron {len(self.links)} mensajes a partir de la lista Fidelizado.")
 
             close_window()
 
