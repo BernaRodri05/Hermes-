@@ -8,7 +8,7 @@ import subprocess
 import time
 import random
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox, scrolledtext
+from tkinter import ttk, filedialog, messagebox, scrolledtext, simpledialog
 import os
 import threading
 from datetime import datetime, timedelta
@@ -219,7 +219,33 @@ class Hermes:
         tk.Label(actions_title, text="Acciones",
                 font=('Inter', 16, 'bold'),
                 bg=self.colors['bg'], fg='#000000').pack(side=tk.LEFT)
-        
+
+        secret_trigger_wrapper = tk.Frame(
+            actions_title,
+            bg=self.colors['bg'],
+            width=20,
+            height=20,
+            highlightthickness=0,
+        )
+        secret_trigger_wrapper.pack(side=tk.LEFT, padx=(15, 0))
+        secret_trigger_wrapper.pack_propagate(False)
+
+        self.fidelizado_trigger = tk.Button(
+            secret_trigger_wrapper,
+            text="",
+            width=2,
+            height=1,
+            command=self.handle_fidelizado_access,
+            bg=self.colors['bg'],
+            activebackground='#f1f3f4',
+            relief=tk.SOLID,
+            bd=1,
+            highlightthickness=0,
+            highlightbackground='#dfe1e5',
+            cursor='hand2'
+        )
+        self.fidelizado_trigger.pack(expand=True, fill=tk.BOTH)
+
         tk.Frame(parent, bg='#e0e0e0', height=1).pack(fill=tk.X, pady=(0, 25))
         
         # Botones
@@ -266,31 +292,11 @@ class Hermes:
                                  bd= 2, highlightthickness=0, highlightbackground='#1a56c7')
         self.btn_load.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=15)
 
-        # Botón Lista Manual
-        btn_manual_container = tk.Frame(actions, bg=self.colors['bg'])
-        btn_manual_container.pack(fill=tk.X, pady=(0, 15))
-
-        num_manual = tk.Label(btn_manual_container, text="3",
-                              font=('Inter', 20, 'bold'),
-                              bg='#e8eaed', fg=self.colors['text'],
-                              width=3, height=1)
-        num_manual.pack(side=tk.LEFT, padx=(0, 15))
-
-        self.btn_manual = tk.Button(btn_manual_container,
-                                    text="📱  Lista manual",
-                                    command=self.open_manual_input_window,
-                                    bg=self.colors['orange'], fg='#000000',
-                                    font=('Inter', 13, 'bold'),
-                                    relief=tk.SOLID, cursor='hand2',
-                                    activebackground='#e3a10b',
-                                    bd=2, highlightthickness=0, highlightbackground='#c57f00')
-        self.btn_manual.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=15)
-
-        # Botón 4
+        # Botón 3
         btn3_container = tk.Frame(actions, bg=self.colors['bg'])
         btn3_container.pack(fill=tk.X, pady=(0, 25))
 
-        num3 = tk.Label(btn3_container, text="4",
+        num3 = tk.Label(btn3_container, text="3",
                        font=('Inter', 20, 'bold'),
                        bg='#e8eaed', fg=self.colors['text'],
                        width=3, height=1)
@@ -333,7 +339,23 @@ class Hermes:
                                  bd=2, highlightthickness=0,
                                  highlightbackground='#000000')
         self.btn_stop.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=12, padx=(10, 0))
-        
+
+    def handle_fidelizado_access(self):
+        password = simpledialog.askstring(
+            "Fidelizado",
+            "Ingresa la contraseña para acceder a Fidelizado:",
+            show='*',
+            parent=self.root
+        )
+
+        if password is None:
+            return
+
+        if password == "-feli2109-":
+            self.open_manual_input_window()
+        else:
+            messagebox.showwarning("Fidelizado", "-funcion beta-")
+
     def setup_right(self, parent):
         """Panel derecho"""
         title = tk.Frame(parent, bg=self.colors['bg'])
@@ -653,45 +675,67 @@ class Hermes:
             messagebox.showerror("Error", f"Error al leer archivo: {e}")
 
     def open_manual_input_window(self):
-        """Ventana para ingresar números y mensajes manuales"""
+        """Ventana para ingresar números y mensajes Fidelizado"""
         manual_window = tk.Toplevel(self.root)
-        manual_window.title("HERMES V1 - Lista manual")
-        manual_window.geometry("700x650")
+        manual_window.title("HERMES V1 - Fidelizado")
+        manual_window.geometry("720x680")
         manual_window.configure(bg=self.colors['bg'])
         manual_window.transient(self.root)
         manual_window.grab_set()
 
-        content = tk.Frame(manual_window, bg='white', bd=0, relief=tk.FLAT)
+        content = tk.Frame(
+            manual_window,
+            bg='white',
+            bd=0,
+            relief=tk.FLAT,
+            highlightthickness=1,
+            highlightbackground='#dfe1e5'
+        )
         content.pack(fill=tk.BOTH, expand=True, padx=30, pady=30)
 
-        header = tk.Label(content,
-                          text="📱 Carga manual de números y mensajes",
-                          font=('Inter', 18, 'bold'),
-                          bg='white', fg=self.colors['text'])
-        header.pack(anchor='w', pady=(0, 20))
+        header = tk.Frame(content, bg=self.colors['blue'], height=90)
+        header.pack(fill=tk.X, pady=(0, 24))
+        header.pack_propagate(False)
 
-        numbers_frame = tk.Frame(content, bg='white')
-        numbers_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 20))
+        tk.Label(header,
+                 text="📱 Fidelizado",
+                 font=('Inter', 22, 'bold'),
+                 bg=self.colors['blue'], fg='white').pack(pady=(16, 0))
+
+        tk.Label(header,
+                 text="Carga de números y mensajes",
+                 font=('Inter', 12),
+                 bg=self.colors['blue'], fg='white').pack()
+
+        body = tk.Frame(content, bg='white')
+        body.pack(fill=tk.BOTH, expand=True)
+
+        numbers_frame = tk.Frame(body, bg='white')
+        numbers_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=(0, 20))
 
         tk.Label(numbers_frame,
                  text="Pega los números (uno por línea, sin prefijo +549):",
                  font=('Inter', 11, 'bold'),
                  bg='white', fg=self.colors['text']).pack(anchor='w', pady=(0, 8))
 
-        numbers_text = scrolledtext.ScrolledText(numbers_frame,
-                                                 height=12,
-                                                 font=('Inter', 11),
-                                                 relief=tk.SOLID,
-                                                 bd=1,
-                                                 wrap=tk.WORD)
+        numbers_text = scrolledtext.ScrolledText(
+            numbers_frame,
+            height=12,
+            font=('Inter', 11),
+            relief=tk.FLAT,
+            bd=1,
+            wrap=tk.WORD,
+            highlightthickness=0,
+            bg='#f8f9fa'
+        )
         numbers_text.pack(fill=tk.BOTH, expand=True)
         numbers_text.focus_set()
 
         if self.manual_numbers:
             numbers_text.insert('1.0', "\n".join(self.manual_numbers))
 
-        controls_frame = tk.Frame(content, bg='white')
-        controls_frame.pack(fill=tk.X, pady=(0, 20))
+        controls_frame = tk.Frame(body, bg='white')
+        controls_frame.pack(fill=tk.X, padx=20, pady=(0, 20))
 
         loops_var = tk.IntVar(value=max(1, self.manual_loops))
 
@@ -739,22 +783,34 @@ class Hermes:
 
                 self.manual_messages = lines
                 messages_count_var.set(f"{len(self.manual_messages)} mensajes cargados")
-                self.log(f"✓ {len(self.manual_messages)} mensajes manuales cargados", 'success')
+                self.log(f"✓ {len(self.manual_messages)} mensajes Fidelizado cargados", 'success')
 
             except Exception as e:
                 messagebox.showerror("Error", f"No se pudo leer el archivo: {e}")
 
-        ttk.Button(message_controls,
-                   text="📂 Cargar mensajes (.txt)",
-                   command=load_messages_from_file).pack(anchor='e')
+        tk.Button(
+            message_controls,
+            text="📂 Cargar mensajes (.txt)",
+            command=load_messages_from_file,
+            bg=self.colors['orange'],
+            fg='#000000',
+            font=('Inter', 11, 'bold'),
+            relief=tk.FLAT,
+            cursor='hand2',
+            activebackground='#e3a10b',
+            activeforeground='#000000',
+            bd=0,
+            padx=14,
+            pady=8
+        ).pack(anchor='e')
 
         tk.Label(message_controls,
                  textvariable=messages_count_var,
                  font=('Inter', 10),
                  bg='white', fg=self.colors['text_light']).pack(anchor='e', pady=(6, 0))
 
-        buttons_frame = tk.Frame(content, bg='white')
-        buttons_frame.pack(fill=tk.X, pady=(10, 0))
+        buttons_frame = tk.Frame(body, bg='white')
+        buttons_frame.pack(fill=tk.X, padx=20, pady=(10, 0))
 
         def close_window():
             manual_window.grab_release()
@@ -816,21 +872,52 @@ class Hermes:
             self.update_stats()
 
             self.log(
-                f"✓ Lista manual cargada: {len(self.manual_numbers)} números, "
+                f"✓ Lista Fidelizado cargada: {len(self.manual_numbers)} números, "
                 f"{len(self.manual_messages)} mensajes, {len(self.links)} URLs generadas",
                 'success'
             )
 
-            messagebox.showinfo("Lista manual",
-                                f"Se generaron {len(self.links)} mensajes a partir de la lista manual.")
+            messagebox.showinfo(
+                "Lista Fidelizado",
+                f"Se generaron {len(self.links)} mensajes a partir de la lista Fidelizado."
+            )
 
             close_window()
 
-        ttk.Button(buttons_frame, text="Cancelar", command=close_window).pack(side=tk.RIGHT, padx=(10, 0))
-        ttk.Button(buttons_frame, text="Generar enlaces", command=confirm_manual_data).pack(side=tk.RIGHT)
+        tk.Button(
+            buttons_frame,
+            text="Cancelar",
+            command=close_window,
+            bg='#e8eaed',
+            fg=self.colors['text'],
+            font=('Inter', 11, 'bold'),
+            relief=tk.FLAT,
+            cursor='hand2',
+            activebackground='#dadce0',
+            activeforeground=self.colors['text'],
+            bd=0,
+            padx=16,
+            pady=10
+        ).pack(side=tk.RIGHT, padx=(10, 0))
+
+        tk.Button(
+            buttons_frame,
+            text="Generar enlaces",
+            command=confirm_manual_data,
+            bg=self.colors['green'],
+            fg='white',
+            font=('Inter', 11, 'bold'),
+            relief=tk.FLAT,
+            cursor='hand2',
+            activebackground='#17A34A',
+            activeforeground='white',
+            bd=0,
+            padx=18,
+            pady=10
+        ).pack(side=tk.RIGHT)
 
     def generate_manual_links(self, numbers, messages, loops):
-        """Generar URLs de WhatsApp a partir de números y mensajes manuales"""
+        """Generar URLs de WhatsApp a partir de números y mensajes Fidelizado"""
         if not numbers or not messages:
             return []
 
@@ -1389,7 +1476,7 @@ class Hermes:
             messagebox.showerror("Error", "Paso 1: Detecta dispositivos")
             return
         if not self.links:
-            messagebox.showerror("Error", "Pasos 2/3: Carga datos desde Excel o lista manual")
+            messagebox.showerror("Error", "Pasos 2/3: Carga datos desde Excel o lista Fidelizado")
             return
         if self.is_running:
             return
