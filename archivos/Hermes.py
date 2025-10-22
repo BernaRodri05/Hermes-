@@ -189,45 +189,122 @@ class Hermes:
         
         self.setup_left(left)
         self.setup_right(right)
-        
+
+    def _draw_rounded_rect(self, canvas, x1, y1, x2, y2, radius, **kwargs):
+        """Dibujar un rectángulo redondeado en un canvas."""
+        if x2 <= x1 or y2 <= y1:
+            return
+
+        radius = max(0, min(radius, (x2 - x1) / 2, (y2 - y1) / 2))
+        points = [
+            x1 + radius, y1,
+            x2 - radius, y1,
+            x2, y1,
+            x2, y1 + radius,
+            x2, y2 - radius,
+            x2, y2,
+            x2 - radius, y2,
+            x1 + radius, y2,
+            x1, y2,
+            x1, y2 - radius,
+            x1, y1 + radius,
+            x1, y1,
+        ]
+
+        options = {
+            'smooth': True,
+            'splinesteps': 36,
+            'fill': '#ffffff',
+            'outline': '',
+        }
+        options.update(kwargs)
+        canvas.create_polygon(points, **options)
+
+    def create_neumorphic_card(self, parent, *, corner_radius=18, padding=24,
+                                shadow_offset=(8, 10), shadow_color='#d0d4dc'):
+        """Crear una tarjeta con sombra y esquinas redondeadas."""
+        wrapper = tk.Frame(parent, bg=self.colors['bg'])
+
+        shadow_frame = tk.Frame(wrapper, bg=shadow_color, bd=0, highlightthickness=0)
+        shadow_frame.place(x=shadow_offset[0], y=shadow_offset[1])
+
+        canvas = tk.Canvas(wrapper, bg=self.colors['bg'], highlightthickness=0, bd=0)
+        canvas.pack(fill=tk.X, expand=True)
+
+        inner_frame = tk.Frame(canvas, bg='#ffffff')
+        inner_window = canvas.create_window((padding, padding), window=inner_frame,
+                                           anchor='nw', tags='inner_window')
+
+        def _redraw_card(width, height):
+            canvas.delete('card_bg')
+            if width <= 0 or height <= 0:
+                return
+            self._draw_rounded_rect(canvas, 1, 1, width - 1, height - 1,
+                                    corner_radius, tags='card_bg')
+
+        def _on_canvas_configure(event):
+            inner_width = max(event.width - (padding * 2), 0)
+            canvas.coords(inner_window, padding, padding)
+            canvas.itemconfigure(inner_window, width=inner_width)
+            shadow_frame.place_configure(width=event.width, height=event.height)
+            _redraw_card(event.width, event.height)
+
+        def _on_inner_configure(event):
+            width = max(canvas.winfo_width(), event.width + (padding * 2))
+            height = event.height + (padding * 2)
+            canvas.configure(width=width, height=height)
+            shadow_frame.place_configure(width=width, height=height)
+            _redraw_card(width, height)
+
+        canvas.bind('<Configure>', _on_canvas_configure)
+        inner_frame.bind('<Configure>', _on_inner_configure)
+        shadow_frame.lower()
+
+        return wrapper, inner_frame
+
     def setup_left(self, parent):
         """Panel izquierdo"""
         # Configuración de Tiempo
-        config_title = tk.Frame(parent, bg=self.colors['bg'])
-        config_title.pack(fill=tk.X, pady=(0, 20))
-        
+        settings_card, settings_inner = self.create_neumorphic_card(parent)
+        settings_card.pack(fill=tk.X, pady=(0, 40), padx=(0, 30))
+
+        config_title = tk.Frame(settings_inner, bg='#ffffff')
+        config_title.pack(fill=tk.X, pady=(0, 15))
+
         tk.Label(config_title, text="⚙️", font=('Inter', 20),
-                bg=self.colors['bg']).pack(side=tk.LEFT, padx=(0, 10))
-        
+                bg='#ffffff').pack(side=tk.LEFT, padx=(0, 10))
+
         tk.Label(config_title, text="Configuración de Tiempo",
                 font=('Inter', 16, 'bold'),
-                bg=self.colors['bg'], fg='#000000').pack(side=tk.LEFT)
-        
-        tk.Frame(parent, bg='#e0e0e0', height=1).pack(fill=tk.X, pady=(0, 25))
-        
-        # Settings
-        settings = tk.Frame(parent, bg=self.colors['bg'])
-        settings.pack(fill=tk.X, pady=(0, 40))
-        
-        self.create_setting(settings, "Delay entre mensajes (seg):",
+                bg='#ffffff', fg='#000000').pack(side=tk.LEFT)
+
+        tk.Frame(settings_inner, bg='#e0e0e0', height=1).pack(fill=tk.X, pady=(0, 20))
+
+        settings_content = tk.Frame(settings_inner, bg='#ffffff')
+        settings_content.pack(fill=tk.X)
+
+        self.create_setting(settings_content, "Delay entre mensajes (seg):",
                           self.delay_min, self.delay_max, 0)
-        self.create_setting(settings, "Espera después de abrir (seg):",
+        self.create_setting(settings_content, "Espera después de abrir (seg):",
                           self.wait_after_open, None, 1)
-        self.create_setting(settings, "Espera después del 1er ENTER (seg):",
+        self.create_setting(settings_content, "Espera después del 1er ENTER (seg):",
                           self.wait_after_first_enter, None, 2)
-        
+
         # Acciones
-        actions_title = tk.Frame(parent, bg=self.colors['bg'])
-        actions_title.pack(fill=tk.X, pady=(0, 20))
-        
+        actions_card, actions_inner = self.create_neumorphic_card(parent)
+        actions_card.pack(fill=tk.X, pady=(0, 30), padx=(0, 30))
+
+        actions_title = tk.Frame(actions_inner, bg='#ffffff')
+        actions_title.pack(fill=tk.X, pady=(0, 15))
+
         tk.Label(actions_title, text="👤", font=('Inter', 20),
-                bg=self.colors['bg']).pack(side=tk.LEFT, padx=(0, 10))
-        
+                bg='#ffffff').pack(side=tk.LEFT, padx=(0, 10))
+
         tk.Label(actions_title, text="Acciones",
                 font=('Inter', 16, 'bold'),
-                bg=self.colors['bg'], fg='#000000').pack(side=tk.LEFT)
+                bg='#ffffff', fg='#000000').pack(side=tk.LEFT)
 
-        unlock_wrapper = tk.Frame(actions_title, bg=self.colors['bg'])
+        unlock_wrapper = tk.Frame(actions_title, bg='#ffffff')
         unlock_wrapper.pack(side=tk.LEFT, padx=(12, 0))
 
         unlock_shadow = tk.Frame(unlock_wrapper, bg='#c8ccd5', bd=0)
@@ -258,23 +335,22 @@ class Hermes:
             highlightcolor='#c8ccd5'
         )
         self.fidelizado_unlock_btn.pack()
-        
-        tk.Frame(parent, bg='#e0e0e0', height=1).pack(fill=tk.X, pady=(0, 25))
-        
-        # Botones
-        actions = tk.Frame(parent, bg=self.colors['bg'])
-        actions.pack(fill=tk.X)
-        
+
+        tk.Frame(actions_inner, bg='#e0e0e0', height=1).pack(fill=tk.X, pady=(0, 20))
+
+        actions_body = tk.Frame(actions_inner, bg='#ffffff')
+        actions_body.pack(fill=tk.X)
+
         # Botón 1
-        btn1_container = tk.Frame(actions, bg=self.colors['bg'])
+        btn1_container = tk.Frame(actions_body, bg='#ffffff')
         btn1_container.pack(fill=tk.X, pady=(0, 15))
-        
+
         num1 = tk.Label(btn1_container, text="1",
                        font=('Inter', 20, 'bold'),
                        bg='#e8eaed', fg=self.colors['text'],
                        width=3, height=1)
         num1.pack(side=tk.LEFT, padx=(0, 15))
-        
+
         self.btn_detect = tk.Button(btn1_container,
                                     text="🔍  Detectar Dispositivos",
                                     command=self.detect_devices,
@@ -284,17 +360,17 @@ class Hermes:
                                     activebackground='#3367D6',
                                     bd= 2, highlightthickness=0, highlightbackground='#1a56c7')
         self.btn_detect.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=15)
-        
+
         # Botón 2
-        btn2_container = tk.Frame(actions, bg=self.colors['bg'])
+        btn2_container = tk.Frame(actions_body, bg='#ffffff')
         btn2_container.pack(fill=tk.X, pady=(0, 15))
-        
+
         num2 = tk.Label(btn2_container, text="2",
                        font=('Inter', 20, 'bold'),
                        bg='#e8eaed', fg=self.colors['text'],
                        width=3, height=1)
         num2.pack(side=tk.LEFT, padx=(0, 15))
-        
+
         self.btn_load = tk.Button(btn2_container,
                                  text="📄  Cargar y Procesar Excel",
                                  command=self.load_and_process_excel,
@@ -306,10 +382,10 @@ class Hermes:
         self.btn_load.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=15)
 
         # Sección Fidelizado
-        fidelizado_section = tk.Frame(actions, bg=self.colors['bg'])
+        fidelizado_section = tk.Frame(actions_body, bg='#ffffff')
         fidelizado_section.pack(fill=tk.X, pady=(0, 20))
 
-        secret_trigger_wrapper = tk.Frame(fidelizado_section, bg=self.colors['bg'])
+        secret_trigger_wrapper = tk.Frame(fidelizado_section, bg='#ffffff')
         secret_trigger_wrapper.pack(fill=tk.X, padx=(48, 0))
 
         shadow_frame = tk.Frame(secret_trigger_wrapper, bg='#c8ccd5', bd=0)
@@ -346,7 +422,7 @@ class Hermes:
         self.fidelizado_shadow = shadow_frame
 
         # Botón 3
-        btn3_container = tk.Frame(actions, bg=self.colors['bg'])
+        btn3_container = tk.Frame(actions_body, bg='#ffffff')
         btn3_container.pack(fill=tk.X, pady=(0, 25))
 
         num3 = tk.Label(btn3_container, text="3",
@@ -354,7 +430,7 @@ class Hermes:
                        bg='#e8eaed', fg=self.colors['text'],
                        width=3, height=1)
         num3.pack(side=tk.LEFT, padx=(0, 15))
-        
+
         self.btn_start = tk.Button(btn3_container,
                                    text="▶  INICIAR ENVÍO",
                                    command=self.start_sending,
@@ -364,11 +440,11 @@ class Hermes:
                                    activebackground='#17A34A',
                                    bd= 2, highlightthickness=0, highlightbackground='#0f8239')
         self.btn_start.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=15)
-        
+
         # Controles
-        controls = tk.Frame(actions, bg=self.colors['bg'])
+        controls = tk.Frame(actions_body, bg='#ffffff')
         controls.pack(fill=tk.X, pady=(10, 0))
-        
+
         self.btn_pause = tk.Button(controls,
                                    text="⏸  PAUSAR",
                                    command=self.pause_sending,
@@ -380,7 +456,7 @@ class Hermes:
                                    bd=2, highlightthickness=0,
                                    highlightbackground='#000000')
         self.btn_pause.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=12, padx=(0, 10))
-        
+
         self.btn_stop = tk.Button(controls,
                                  text="⏹  CANCELAR",
                                  command=self.stop_sending,
@@ -504,24 +580,27 @@ class Hermes:
             
     def create_setting(self, parent, label, var1, var2, row):
         """Crear fila de configuración"""
+        parent_bg = parent.cget('bg') if hasattr(parent, 'cget') else self.colors['bg']
+        parent.grid_columnconfigure(1, weight=1)
+
         tk.Label(parent, text=label,
                 font=('Inter', 12),
-                bg=self.colors['bg'], fg=self.colors['text']).grid(
+                bg=parent_bg, fg=self.colors['text']).grid(
                     row=row, column=0, sticky='w', pady=15)
-        
-        controls = tk.Frame(parent, bg=self.colors['bg'])
+
+        controls = tk.Frame(parent, bg=parent_bg)
         controls.grid(row=row, column=1, sticky='e', pady=15, padx=(20, 0))
-        
+
         combo1 = ttk.Combobox(controls, textvariable=var1, width=8,
                              font=('Inter', 11), state='normal',
                              values=list(range(1, 121)))
         combo1.pack(side=tk.LEFT, padx=(0, 10))
-        
+
         if var2:
             tk.Label(controls, text="-",
                     font=('Inter', 12),
-                    bg=self.colors['bg']).pack(side=tk.LEFT, padx=(0, 10))
-            
+                    bg=parent_bg).pack(side=tk.LEFT, padx=(0, 10))
+
             combo2 = ttk.Combobox(controls, textvariable=var2, width=8,
                                  font=('Inter', 11), state='normal',
                                  values=list(range(1, 121)))
