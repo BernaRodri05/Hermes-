@@ -17,6 +17,198 @@ import csv
 import io
 import urllib.parse
 
+
+def _clamp(value):
+    return max(0, min(255, int(value)))
+
+
+def lighten_color(color, factor=0.1):
+    """Lighten a HEX color by the given factor (0-1)."""
+    color = color.lstrip('#')
+    r = int(color[0:2], 16)
+    g = int(color[2:4], 16)
+    b = int(color[4:6], 16)
+
+    r = _clamp(r + (255 - r) * factor)
+    g = _clamp(g + (255 - g) * factor)
+    b = _clamp(b + (255 - b) * factor)
+
+    return f"#{int(r):02x}{int(g):02x}{int(b):02x}"
+
+
+def darken_color(color, factor=0.1):
+    """Darken a HEX color by the given factor (0-1)."""
+    color = color.lstrip('#')
+    r = int(color[0:2], 16)
+    g = int(color[2:4], 16)
+    b = int(color[4:6], 16)
+
+    r = _clamp(r * (1 - factor))
+    g = _clamp(g * (1 - factor))
+    b = _clamp(b * (1 - factor))
+
+    return f"#{int(r):02x}{int(g):02x}{int(b):02x}"
+
+
+class ShadowButton:
+    """Custom button with a floating shadow frame and neumorphic styling."""
+
+    def __init__(
+        self,
+        parent,
+        text,
+        command,
+        base_bg,
+        active_bg,
+        text_color='#ffffff',
+        font=('Inter', 13, 'bold'),
+        shadow_color='#cbd5e1',
+        shadow_offset=(6, 6),
+        hover_bg=None,
+        disabled_bg='#d1d5db',
+        disabled_fg='#9ca3af',
+        cursor='hand2',
+        padding=(24, 14)
+    ):
+        self.parent = parent
+        self.parent_bg = parent.cget('bg') if hasattr(parent, 'cget') else '#ffffff'
+        self.wrapper = tk.Frame(parent, bg=self.parent_bg)
+
+        self.shadow = tk.Frame(self.wrapper, bg=shadow_color, bd=0, highlightthickness=0)
+        self.shadow.place(x=shadow_offset[0], y=shadow_offset[1])
+
+        self.base_bg = base_bg
+        self.text_color = text_color
+        self.active_bg = active_bg
+        self.hover_bg = hover_bg or lighten_color(base_bg, 0.08)
+        self.shadow_color = shadow_color
+        self.disabled_bg = disabled_bg
+        self.disabled_fg = disabled_fg
+        self.cursor = cursor
+        self.command = command
+
+        outline_color = darken_color(base_bg, 0.18)
+
+        self.button_frame = tk.Frame(
+            self.wrapper,
+            bg=self.base_bg,
+            bd=0,
+            relief=tk.FLAT,
+            highlightthickness=1,
+            highlightbackground=outline_color,
+            highlightcolor=outline_color
+        )
+        self.button_frame.pack(fill=tk.X, expand=True)
+
+        self.label = tk.Label(
+            self.button_frame,
+            text=text,
+            bg=self.base_bg,
+            fg=self.text_color,
+            font=font,
+            padx=padding[0],
+            pady=padding[1],
+            cursor=self.cursor
+        )
+        self.label.pack(fill=tk.X, expand=True)
+
+        def _sync_shadow(event):
+            self.shadow.place_configure(width=event.width, height=event.height)
+
+        self.button_frame.bind('<Configure>', _sync_shadow)
+        self.shadow.lower()
+
+        self.state = tk.NORMAL
+        self._pressed = False
+
+        for widget in (self.button_frame, self.label):
+            widget.bind('<Enter>', self._on_enter)
+            widget.bind('<Leave>', self._on_leave)
+            widget.bind('<ButtonPress-1>', self._on_press)
+            widget.bind('<ButtonRelease-1>', self._on_release)
+
+    # Geometry management proxies
+    def pack(self, *args, **kwargs):
+        return self.wrapper.pack(*args, **kwargs)
+
+    def grid(self, *args, **kwargs):
+        return self.wrapper.grid(*args, **kwargs)
+
+    def place(self, *args, **kwargs):
+        return self.wrapper.place(*args, **kwargs)
+
+    # Configuration methods
+    def configure(self, **kwargs):
+        if 'text' in kwargs:
+            self.label.configure(text=kwargs.pop('text'))
+        if 'command' in kwargs:
+            self.command = kwargs.pop('command')
+        if 'state' in kwargs:
+            self._set_state(kwargs.pop('state'))
+        if 'fg' in kwargs:
+            self.text_color = kwargs['fg']
+            if self.state == tk.NORMAL:
+                self.label.configure(fg=kwargs['fg'])
+            kwargs.pop('fg')
+        if 'bg' in kwargs:
+            self.base_bg = kwargs['bg']
+            if self.state == tk.NORMAL:
+                self._set_bg(self.base_bg)
+            kwargs.pop('bg')
+        if kwargs:
+            self.label.configure(**kwargs)
+
+    config = configure
+
+    def _set_state(self, state):
+        self.state = state
+        if state == tk.DISABLED:
+            self._set_bg(self.disabled_bg, update_outline=True)
+            self.label.configure(fg=self.disabled_fg, cursor='arrow')
+            self.shadow.configure(bg=darken_color(self.disabled_bg, 0.1))
+        else:
+            self._set_bg(self.base_bg, update_outline=True)
+            self.label.configure(fg=self.text_color, cursor=self.cursor)
+            self.shadow.configure(bg=self.shadow_color)
+
+    def _set_bg(self, color, update_outline=False):
+        self.button_frame.configure(bg=color)
+        self.label.configure(bg=color)
+        if update_outline:
+            outline = darken_color(color, 0.18)
+            self.button_frame.configure(highlightbackground=outline, highlightcolor=outline)
+
+    # Event handlers
+    def _on_enter(self, _event):
+        if self.state != tk.NORMAL:
+            return
+        self._set_bg(self.hover_bg)
+
+    def _on_leave(self, _event):
+        if self.state != tk.NORMAL:
+            return
+        self._pressed = False
+        self._set_bg(self.base_bg)
+
+    def _on_press(self, _event):
+        if self.state != tk.NORMAL:
+            return
+        self._pressed = True
+        self._set_bg(self.active_bg)
+
+    def _on_release(self, event):
+        if self.state != tk.NORMAL or not self._pressed:
+            return
+        self._pressed = False
+        widget = event.widget
+        width = widget.winfo_width()
+        height = widget.winfo_height()
+        inside = 0 <= event.x <= width and 0 <= event.y <= height
+        if inside and callable(self.command):
+            self.command()
+        self._set_bg(self.hover_bg if inside else self.base_bg)
+
+
 # Verificar dependencias
 try:
     import openpyxl
@@ -275,15 +467,16 @@ class Hermes:
                        width=3, height=1)
         num1.pack(side=tk.LEFT, padx=(0, 15))
         
-        self.btn_detect = tk.Button(btn1_container,
-                                    text="🔍  Detectar Dispositivos",
-                                    command=self.detect_devices,
-                                    bg=self.colors['blue'], fg='white',
-                                    font=('Inter', 13, 'bold'),
-                                    relief=tk.SOLID, cursor='hand2',
-                                    activebackground='#3367D6',
-                                    bd= 2, highlightthickness=0, highlightbackground='#1a56c7')
-        self.btn_detect.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=15)
+        self.btn_detect = ShadowButton(
+            btn1_container,
+            text="🔍  Detectar Dispositivos",
+            command=self.detect_devices,
+            base_bg=self.colors['blue'],
+            active_bg='#3367D6',
+            text_color='white',
+            shadow_color='#c5c9d6'
+        )
+        self.btn_detect.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
         # Botón 2
         btn2_container = tk.Frame(actions, bg=self.colors['bg'])
@@ -295,15 +488,16 @@ class Hermes:
                        width=3, height=1)
         num2.pack(side=tk.LEFT, padx=(0, 15))
         
-        self.btn_load = tk.Button(btn2_container,
-                                 text="📄  Cargar y Procesar Excel",
-                                 command=self.load_and_process_excel,
-                                 bg=self.colors['green'], fg='white',
-                                 font=('Inter', 13, 'bold'),
-                                 relief=tk.SOLID, cursor='hand2',
-                                 activebackground='#17A34A',
-                                 bd= 2, highlightthickness=0, highlightbackground='#1a56c7')
-        self.btn_load.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=15)
+        self.btn_load = ShadowButton(
+            btn2_container,
+            text="📄  Cargar y Procesar Excel",
+            command=self.load_and_process_excel,
+            base_bg=self.colors['green'],
+            active_bg='#17A34A',
+            text_color='white',
+            shadow_color='#c5c9d6'
+        )
+        self.btn_load.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
         # Sección Fidelizado
         fidelizado_section = tk.Frame(actions, bg=self.colors['bg'])
@@ -355,43 +549,52 @@ class Hermes:
                        width=3, height=1)
         num3.pack(side=tk.LEFT, padx=(0, 15))
         
-        self.btn_start = tk.Button(btn3_container,
-                                   text="▶  INICIAR ENVÍO",
-                                   command=self.start_sending,
-                                   bg=self.colors['green'], fg='white',
-                                   font=('Inter', 13, 'bold'),
-                                   relief=tk.SOLID, cursor='hand2',
-                                   activebackground='#17A34A',
-                                   bd= 2, highlightthickness=0, highlightbackground='#0f8239')
-        self.btn_start.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=15)
+        self.btn_start = ShadowButton(
+            btn3_container,
+            text="▶  INICIAR ENVÍO",
+            command=self.start_sending,
+            base_bg='#34D399',
+            active_bg='#22C55E',
+            text_color='white',
+            shadow_color='#c5c9d6'
+        )
+        self.btn_start.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
         # Controles
         controls = tk.Frame(actions, bg=self.colors['bg'])
         controls.pack(fill=tk.X, pady=(10, 0))
         
-        self.btn_pause = tk.Button(controls,
-                                   text="⏸  PAUSAR",
-                                   command=self.pause_sending,
-                                   bg='#FF9800', fg='#000000',
-                                   font=('Inter', 12, 'bold'),
-                                   relief=tk.SOLID, cursor='hand2',
-                                   state=tk.DISABLED,
-                                   activebackground='#D67700',
-                                   bd=2, highlightthickness=0,
-                                   highlightbackground='#000000')
-        self.btn_pause.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=12, padx=(0, 10))
-        
-        self.btn_stop = tk.Button(controls,
-                                 text="⏹  CANCELAR",
-                                 command=self.stop_sending,
-                                 bg='#EA4335', fg='#000000',
-                                 font=('Inter', 12, 'bold'),
-                                 relief=tk.SOLID, cursor='hand2',
-                                 state=tk.DISABLED,
-                                 activebackground='#D33426',
-                                 bd=2, highlightthickness=0,
-                                 highlightbackground='#000000')
-        self.btn_stop.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=12, padx=(10, 0))
+        self.btn_pause = ShadowButton(
+            controls,
+            text="⏸  PAUSAR",
+            command=self.pause_sending,
+            base_bg='#FACC15',
+            active_bg='#EAB308',
+            text_color='#202124',
+            font=('Inter', 12, 'bold'),
+            shadow_color='#d4d7df',
+            disabled_bg='#e5e7eb',
+            disabled_fg='#9ca3af',
+            padding=(22, 12)
+        )
+        self.btn_pause.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
+        self.btn_pause.configure(state=tk.DISABLED)
+
+        self.btn_stop = ShadowButton(
+            controls,
+            text="⏹  CANCELAR",
+            command=self.stop_sending,
+            base_bg='#EA4335',
+            active_bg='#C5221F',
+            text_color='#ffffff',
+            font=('Inter', 12, 'bold'),
+            shadow_color='#d4d7df',
+            disabled_bg='#e5e7eb',
+            disabled_fg='#9ca3af',
+            padding=(22, 12)
+        )
+        self.btn_stop.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(10, 0))
+        self.btn_stop.configure(state=tk.DISABLED)
         
     def setup_right(self, parent):
         """Panel derecho"""
