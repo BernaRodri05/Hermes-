@@ -45,7 +45,7 @@ class Hermes:
     def __init__(self, root):
         self.root = root
         self.root.title("HERMES V1")
-        self.root.geometry("1500x900")
+        self.root.minsize(1500, 900)
         self.root.configure(bg="#f8f9fa")
         
         # Variables
@@ -153,11 +153,10 @@ class Hermes:
         canvas = tk.Canvas(main_container, bg=self.colors['bg'], highlightthickness=0)
         scrollbar = tk.Scrollbar(main_container, orient="vertical", command=canvas.yview)
         main = tk.Frame(canvas, bg=self.colors['bg'])
-        
-        main.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
+        main.grid_columnconfigure(0, weight=1)
+        main.grid_columnconfigure(1, weight=1)
+        main.grid_rowconfigure(0, weight=1)
+        main.grid_rowconfigure(1, weight=1)
         
         canvas.create_window((0, 0), window=main, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
@@ -179,16 +178,27 @@ class Hermes:
         
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
-        
-        # Dos columnas
+
+        # Dos columnas adaptables
         left = tk.Frame(main, bg=self.colors['bg'])
-        left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 40))
-        
         right = tk.Frame(main, bg=self.colors['bg'])
-        right.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(40, 0))
-        
+
+        self.left_panel = left
+        self.right_panel = right
+        self._current_main_layout = None
+
+        def _on_main_configure(event):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+            self._update_main_layout(event.width)
+
+        main.bind("<Configure>", _on_main_configure)
+
         self.setup_left(left)
         self.setup_right(right)
+
+        main.update_idletasks()
+        initial_width = main.winfo_width() or self.root.winfo_width()
+        self._update_main_layout(initial_width)
         
     def setup_left(self, parent):
         """Panel izquierdo"""
@@ -397,7 +407,7 @@ class Hermes:
         """Panel derecho"""
         title = tk.Frame(parent, bg=self.colors['bg'])
         title.pack(fill=tk.X, pady=(0, 25))
-        
+
         tk.Label(title, text="✓", font=('Inter', 20),
                 bg=self.colors['bg'], fg=self.colors['green']).pack(side=tk.LEFT, padx=(0, 10))
         
@@ -409,7 +419,8 @@ class Hermes:
         
         # Stats
         stats = tk.Frame(parent, bg=self.colors['bg'])
-        stats.pack(fill=tk.X, pady=(0, 35))
+        stats.pack(fill=tk.BOTH, expand=True, pady=(0, 35))
+        self.stats_frame = stats
         
         self.create_stat(stats, "Total", "0", self.colors['blue'], 0)
         self.create_stat(stats, "Enviados", "0", self.colors['green'], 1)
@@ -461,7 +472,8 @@ class Hermes:
                 bg=self.colors['bg'], fg='#000000').pack(side=tk.LEFT)
         
         log_container = tk.Frame(parent, bg='#1e1e1e')
-        log_container.pack(fill=tk.BOTH, expand=True)
+        log_container.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        self.log_container = log_container
         
         scrollbar = tk.Scrollbar(log_container)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
@@ -481,6 +493,34 @@ class Hermes:
         self.log("✓ HERMES V1 iniciado", 'success')
         self.log("ℹ Sigue los pasos 1, 2, 3 y 4", 'info')
         self.log("✓ ADB detectado", 'success')
+
+    def _update_main_layout(self, width):
+        """Actualizar disposición principal entre columnas y modo apilado"""
+        if not hasattr(self, 'left_panel') or not hasattr(self, 'right_panel'):
+            return
+
+        threshold = 1100
+        mode = 'stacked' if width and width < threshold else 'columns'
+
+        if self._current_main_layout == mode:
+            return
+
+        if mode == 'columns':
+            self.left_panel.grid(row=0, column=0, sticky='nsew', padx=(0, 40), pady=(0, 0))
+            self.right_panel.grid(row=0, column=1, sticky='nsew', padx=(40, 0), pady=(0, 0))
+            if hasattr(self, 'stats_frame'):
+                self.stats_frame.pack_configure(pady=(0, 35))
+            if hasattr(self, 'log_container'):
+                self.log_container.pack_configure(pady=(0, 10))
+        else:
+            self.left_panel.grid(row=0, column=0, columnspan=2, sticky='nsew', padx=0, pady=(0, 30))
+            self.right_panel.grid(row=1, column=0, columnspan=2, sticky='nsew', padx=0, pady=(0, 0))
+            if hasattr(self, 'stats_frame'):
+                self.stats_frame.pack_configure(pady=(0, 20))
+            if hasattr(self, 'log_container'):
+                self.log_container.pack_configure(pady=(0, 20))
+
+        self._current_main_layout = mode
         
     def create_stat(self, parent, label, value, color, col):
         """Crear caja de estadística"""
