@@ -1237,7 +1237,15 @@ class Hermes:
                 self.current_index = i
                 device = self.devices[idx]
                 idx = (idx + 1) % len(self.devices)
-                
+
+                self.close_all_apps(device)
+
+                while self.is_paused and not self.should_stop:
+                    time.sleep(0.1)
+                if self.should_stop:
+                    self.log("⚠ Envío cancelado", 'warning')
+                    break
+
                 if self.send_msg(device, link, i, len(self.links), pkg, chrome):
                     self.sent_count += 1
                 else:
