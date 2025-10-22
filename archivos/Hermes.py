@@ -450,8 +450,8 @@ class Hermes:
         self.main_canvas = canvas
         scrollbar = tk.Scrollbar(main_container, orient="vertical", command=canvas.yview)
         main = tk.Frame(canvas, bg=self.colors['bg'])
-        main.grid_columnconfigure(0, weight=1)
-        main.grid_columnconfigure(1, weight=1)
+        main.grid_columnconfigure(0, weight=1, uniform='main_panels')
+        main.grid_columnconfigure(1, weight=1, uniform='main_panels')
         main.grid_rowconfigure(0, weight=1)
         main.grid_rowconfigure(1, weight=1)
         
@@ -811,8 +811,8 @@ class Hermes:
             return
 
         if mode == 'columns':
-            self.left_panel.grid(row=0, column=0, sticky='nsew', padx=(0, 40), pady=(0, 0))
-            self.right_panel.grid(row=0, column=1, sticky='nsew', padx=(40, 0), pady=(0, 0))
+            self.left_panel.grid(row=0, column=0, sticky='nsew', padx=(20, 20), pady=(0, 0))
+            self.right_panel.grid(row=0, column=1, sticky='nsew', padx=(20, 20), pady=(0, 0))
             if hasattr(self, 'stats_frame'):
                 self.stats_frame.pack_configure(pady=(0, 35))
             if hasattr(self, 'log_container'):
