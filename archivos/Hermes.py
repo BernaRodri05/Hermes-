@@ -5,7 +5,6 @@ Con procesador de Excel/CSV integrado
 """
 
 import subprocess
-import re
 import time
 import random
 import tkinter as tk
@@ -1327,44 +1326,17 @@ class Hermes:
             self.log("⚠ No se puede cerrar apps: ADB no configurado", 'warning')
             return
 
-        self.log(f"🧹 Cerrando aplicaciones en {device}...", 'info')
+        self.log(f"🧹 Cerrando WhatsApp y Google en {device}...", 'info')
 
-        dynamic_packages = set()
-        try:
-            recents = subprocess.run(
-                [adb, '-s', device, 'shell', 'dumpsys', 'activity', 'recents'],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-            if recents.returncode == 0:
-                cmp_pattern = re.compile(r'cmp=([\w\.]+)/')
-                for match in cmp_pattern.finditer(recents.stdout):
-                    package = match.group(1)
-                    if package and package != 'null':
-                        dynamic_packages.add(package)
-            else:
-                error_msg = recents.stderr.strip() or recents.stdout.strip() or "Error desconocido"
-                self.log(f"⚠ No se pudieron leer apps recientes en {device}: {error_msg}", 'warning')
-        except subprocess.TimeoutExpired:
-            self.log(f"⚠ Timeout al leer apps recientes en {device}", 'warning')
-        except Exception as exc:
-            self.log(f"⚠ Error al leer apps recientes en {device}: {exc}", 'warning')
+        targets = [
+            ("WhatsApp Business", "com.whatsapp.w4b"),
+            ("WhatsApp", "com.whatsapp"),
+            ("Google", "com.google.android.googlequicksearchbox"),
+        ]
 
-        packages = {
-            "com.whatsapp.w4b",
-            "com.whatsapp",
-            "com.android.chrome",
-            "com.google.android.googlequicksearchbox",
-        }
-        packages.update(dynamic_packages)
+        had_error = False
 
-        if packages:
-            self.log(f"🔒 Forzando cierre de {len(packages)} apps en {device}", 'info')
-        else:
-            self.log(f"ℹ No se detectaron apps recientes en {device}", 'info')
-
-        for package in packages:
+        for label, package in targets:
             try:
                 result = subprocess.run(
                     [adb, '-s', device, 'shell', 'am', 'force-stop', package],
@@ -1373,12 +1345,21 @@ class Hermes:
                     timeout=10
                 )
                 if result.returncode != 0:
+                    had_error = True
                     error_msg = result.stderr.strip() or result.stdout.strip() or "Error desconocido"
-                    self.log(f"⚠ No se pudo cerrar {package} en {device}: {error_msg}", 'warning')
+                    self.log(
+                        f"⚠ No se pudo cerrar {label} ({package}) en {device}: {error_msg}",
+                        'warning'
+                    )
             except subprocess.TimeoutExpired:
-                self.log(f"❌ Timeout al forzar cierre de {package} en {device}", 'error')
+                had_error = True
+                self.log(f"❌ Timeout al forzar cierre de {label} ({package}) en {device}", 'error')
             except Exception as exc:
-                self.log(f"❌ Error al forzar cierre de {package} en {device}: {exc}", 'error')
+                had_error = True
+                self.log(f"❌ Error al forzar cierre de {label} ({package}) en {device}: {exc}", 'error')
+
+        if not had_error:
+            self.log(f"✅ Apps cerradas correctamente en {device}", 'success')
 
 
 def main():
