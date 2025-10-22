@@ -464,12 +464,13 @@ class Hermes:
         self.main_canvas = canvas
         scrollbar = tk.Scrollbar(main_container, orient="vertical", command=canvas.yview)
         main = tk.Frame(canvas, bg=self.colors['bg'])
-        main.grid_columnconfigure(0, weight=1, uniform='main_panels')
-        main.grid_columnconfigure(1, weight=1, uniform='main_panels')
+        main.grid_columnconfigure(0, weight=618, uniform='main_panels')
+        main.grid_columnconfigure(1, weight=382, uniform='main_panels')
         main.grid_rowconfigure(0, weight=1)
         main.grid_rowconfigure(1, weight=1)
-        
-        canvas.create_window((0, 0), window=main, anchor="nw")
+
+        self.main_layout = main
+        self.main_window = canvas.create_window((0, 0), window=main, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
         
         # Habilitar scroll con rueda del mouse
@@ -486,6 +487,12 @@ class Hermes:
         canvas.bind("<Enter>", _on_enter)
         canvas.bind("<Leave>", _on_leave)
         canvas.bind_all("<MouseWheel>", _on_mousewheel)
+
+        def _on_canvas_configure(event):
+            canvas.itemconfigure(self.main_window, width=event.width)
+            self._update_main_layout(event.width)
+
+        canvas.bind("<Configure>", _on_canvas_configure)
         
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
@@ -819,13 +826,19 @@ class Hermes:
             return
 
         if mode == 'columns':
-            self.left_panel.grid(row=0, column=0, sticky='nsew', padx=(20, 20), pady=(0, 0))
-            self.right_panel.grid(row=0, column=1, sticky='nsew', padx=(20, 20), pady=(0, 0))
+            if hasattr(self, 'main_layout'):
+                self.main_layout.grid_columnconfigure(0, weight=618, uniform='main_panels', minsize=0)
+                self.main_layout.grid_columnconfigure(1, weight=382, uniform='main_panels', minsize=0)
+            self.left_panel.grid(row=0, column=0, sticky='nsew', padx=(0, 20), pady=(0, 0))
+            self.right_panel.grid(row=0, column=1, sticky='nsew', padx=(20, 0), pady=(0, 0))
             if hasattr(self, 'stats_frame'):
                 self.stats_frame.pack_configure(pady=(0, 35))
             if hasattr(self, 'log_container'):
                 self.log_container.pack_configure(pady=(0, 10))
         else:
+            if hasattr(self, 'main_layout'):
+                self.main_layout.grid_columnconfigure(0, weight=1, uniform='main_panels', minsize=0)
+                self.main_layout.grid_columnconfigure(1, weight=1, uniform='main_panels', minsize=0)
             self.left_panel.grid(row=0, column=0, columnspan=2, sticky='nsew', padx=0, pady=(0, 30))
             self.right_panel.grid(row=1, column=0, columnspan=2, sticky='nsew', padx=0, pady=(0, 0))
             if hasattr(self, 'stats_frame'):
