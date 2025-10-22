@@ -17,6 +17,198 @@ import csv
 import io
 import urllib.parse
 
+
+def _clamp(value):
+    return max(0, min(255, int(value)))
+
+
+def lighten_color(color, factor=0.1):
+    """Lighten a HEX color by the given factor (0-1)."""
+    color = color.lstrip('#')
+    r = int(color[0:2], 16)
+    g = int(color[2:4], 16)
+    b = int(color[4:6], 16)
+
+    r = _clamp(r + (255 - r) * factor)
+    g = _clamp(g + (255 - g) * factor)
+    b = _clamp(b + (255 - b) * factor)
+
+    return f"#{int(r):02x}{int(g):02x}{int(b):02x}"
+
+
+def darken_color(color, factor=0.1):
+    """Darken a HEX color by the given factor (0-1)."""
+    color = color.lstrip('#')
+    r = int(color[0:2], 16)
+    g = int(color[2:4], 16)
+    b = int(color[4:6], 16)
+
+    r = _clamp(r * (1 - factor))
+    g = _clamp(g * (1 - factor))
+    b = _clamp(b * (1 - factor))
+
+    return f"#{int(r):02x}{int(g):02x}{int(b):02x}"
+
+
+class ShadowButton:
+    """Custom button with a floating shadow frame and neumorphic styling."""
+
+    def __init__(
+        self,
+        parent,
+        text,
+        command,
+        base_bg,
+        active_bg,
+        text_color='#ffffff',
+        font=('Inter', 13, 'bold'),
+        shadow_color='#cbd5e1',
+        shadow_offset=(6, 6),
+        hover_bg=None,
+        disabled_bg='#d1d5db',
+        disabled_fg='#9ca3af',
+        cursor='hand2',
+        padding=(24, 14)
+    ):
+        self.parent = parent
+        self.parent_bg = parent.cget('bg') if hasattr(parent, 'cget') else '#ffffff'
+        self.wrapper = tk.Frame(parent, bg=self.parent_bg)
+
+        self.shadow = tk.Frame(self.wrapper, bg=shadow_color, bd=0, highlightthickness=0)
+        self.shadow.place(x=shadow_offset[0], y=shadow_offset[1])
+
+        self.base_bg = base_bg
+        self.text_color = text_color
+        self.active_bg = active_bg
+        self.hover_bg = hover_bg or lighten_color(base_bg, 0.08)
+        self.shadow_color = shadow_color
+        self.disabled_bg = disabled_bg
+        self.disabled_fg = disabled_fg
+        self.cursor = cursor
+        self.command = command
+
+        outline_color = darken_color(base_bg, 0.18)
+
+        self.button_frame = tk.Frame(
+            self.wrapper,
+            bg=self.base_bg,
+            bd=0,
+            relief=tk.FLAT,
+            highlightthickness=1,
+            highlightbackground=outline_color,
+            highlightcolor=outline_color
+        )
+        self.button_frame.pack(fill=tk.X, expand=True)
+
+        self.label = tk.Label(
+            self.button_frame,
+            text=text,
+            bg=self.base_bg,
+            fg=self.text_color,
+            font=font,
+            padx=padding[0],
+            pady=padding[1],
+            cursor=self.cursor
+        )
+        self.label.pack(fill=tk.X, expand=True)
+
+        def _sync_shadow(event):
+            self.shadow.place_configure(width=event.width, height=event.height)
+
+        self.button_frame.bind('<Configure>', _sync_shadow)
+        self.shadow.lower()
+
+        self.state = tk.NORMAL
+        self._pressed = False
+
+        for widget in (self.button_frame, self.label):
+            widget.bind('<Enter>', self._on_enter)
+            widget.bind('<Leave>', self._on_leave)
+            widget.bind('<ButtonPress-1>', self._on_press)
+            widget.bind('<ButtonRelease-1>', self._on_release)
+
+    # Geometry management proxies
+    def pack(self, *args, **kwargs):
+        return self.wrapper.pack(*args, **kwargs)
+
+    def grid(self, *args, **kwargs):
+        return self.wrapper.grid(*args, **kwargs)
+
+    def place(self, *args, **kwargs):
+        return self.wrapper.place(*args, **kwargs)
+
+    # Configuration methods
+    def configure(self, **kwargs):
+        if 'text' in kwargs:
+            self.label.configure(text=kwargs.pop('text'))
+        if 'command' in kwargs:
+            self.command = kwargs.pop('command')
+        if 'state' in kwargs:
+            self._set_state(kwargs.pop('state'))
+        if 'fg' in kwargs:
+            self.text_color = kwargs['fg']
+            if self.state == tk.NORMAL:
+                self.label.configure(fg=kwargs['fg'])
+            kwargs.pop('fg')
+        if 'bg' in kwargs:
+            self.base_bg = kwargs['bg']
+            if self.state == tk.NORMAL:
+                self._set_bg(self.base_bg)
+            kwargs.pop('bg')
+        if kwargs:
+            self.label.configure(**kwargs)
+
+    config = configure
+
+    def _set_state(self, state):
+        self.state = state
+        if state == tk.DISABLED:
+            self._set_bg(self.disabled_bg, update_outline=True)
+            self.label.configure(fg=self.disabled_fg, cursor='arrow')
+            self.shadow.configure(bg=darken_color(self.disabled_bg, 0.1))
+        else:
+            self._set_bg(self.base_bg, update_outline=True)
+            self.label.configure(fg=self.text_color, cursor=self.cursor)
+            self.shadow.configure(bg=self.shadow_color)
+
+    def _set_bg(self, color, update_outline=False):
+        self.button_frame.configure(bg=color)
+        self.label.configure(bg=color)
+        if update_outline:
+            outline = darken_color(color, 0.18)
+            self.button_frame.configure(highlightbackground=outline, highlightcolor=outline)
+
+    # Event handlers
+    def _on_enter(self, _event):
+        if self.state != tk.NORMAL:
+            return
+        self._set_bg(self.hover_bg)
+
+    def _on_leave(self, _event):
+        if self.state != tk.NORMAL:
+            return
+        self._pressed = False
+        self._set_bg(self.base_bg)
+
+    def _on_press(self, _event):
+        if self.state != tk.NORMAL:
+            return
+        self._pressed = True
+        self._set_bg(self.active_bg)
+
+    def _on_release(self, event):
+        if self.state != tk.NORMAL or not self._pressed:
+            return
+        self._pressed = False
+        widget = event.widget
+        width = widget.winfo_width()
+        height = widget.winfo_height()
+        inside = 0 <= event.x <= width and 0 <= event.y <= height
+        if inside and callable(self.command):
+            self.command()
+        self._set_bg(self.hover_bg if inside else self.base_bg)
+
+
 # Verificar dependencias
 try:
     import openpyxl
@@ -189,122 +381,45 @@ class Hermes:
         
         self.setup_left(left)
         self.setup_right(right)
-
-    def _draw_rounded_rect(self, canvas, x1, y1, x2, y2, radius, **kwargs):
-        """Dibujar un rectángulo redondeado en un canvas."""
-        if x2 <= x1 or y2 <= y1:
-            return
-
-        radius = max(0, min(radius, (x2 - x1) / 2, (y2 - y1) / 2))
-        points = [
-            x1 + radius, y1,
-            x2 - radius, y1,
-            x2, y1,
-            x2, y1 + radius,
-            x2, y2 - radius,
-            x2, y2,
-            x2 - radius, y2,
-            x1 + radius, y2,
-            x1, y2,
-            x1, y2 - radius,
-            x1, y1 + radius,
-            x1, y1,
-        ]
-
-        options = {
-            'smooth': True,
-            'splinesteps': 36,
-            'fill': '#ffffff',
-            'outline': '',
-        }
-        options.update(kwargs)
-        canvas.create_polygon(points, **options)
-
-    def create_neumorphic_card(self, parent, *, corner_radius=18, padding=24,
-                                shadow_offset=(8, 10), shadow_color='#d0d4dc'):
-        """Crear una tarjeta con sombra y esquinas redondeadas."""
-        wrapper = tk.Frame(parent, bg=self.colors['bg'])
-
-        shadow_frame = tk.Frame(wrapper, bg=shadow_color, bd=0, highlightthickness=0)
-        shadow_frame.place(x=shadow_offset[0], y=shadow_offset[1])
-
-        canvas = tk.Canvas(wrapper, bg=self.colors['bg'], highlightthickness=0, bd=0)
-        canvas.pack(fill=tk.X, expand=True)
-
-        inner_frame = tk.Frame(canvas, bg='#ffffff')
-        inner_window = canvas.create_window((padding, padding), window=inner_frame,
-                                           anchor='nw', tags='inner_window')
-
-        def _redraw_card(width, height):
-            canvas.delete('card_bg')
-            if width <= 0 or height <= 0:
-                return
-            self._draw_rounded_rect(canvas, 1, 1, width - 1, height - 1,
-                                    corner_radius, tags='card_bg')
-
-        def _on_canvas_configure(event):
-            inner_width = max(event.width - (padding * 2), 0)
-            canvas.coords(inner_window, padding, padding)
-            canvas.itemconfigure(inner_window, width=inner_width)
-            shadow_frame.place_configure(width=event.width, height=event.height)
-            _redraw_card(event.width, event.height)
-
-        def _on_inner_configure(event):
-            width = max(canvas.winfo_width(), event.width + (padding * 2))
-            height = event.height + (padding * 2)
-            canvas.configure(width=width, height=height)
-            shadow_frame.place_configure(width=width, height=height)
-            _redraw_card(width, height)
-
-        canvas.bind('<Configure>', _on_canvas_configure)
-        inner_frame.bind('<Configure>', _on_inner_configure)
-        shadow_frame.lower()
-
-        return wrapper, inner_frame
-
+        
     def setup_left(self, parent):
         """Panel izquierdo"""
         # Configuración de Tiempo
-        settings_card, settings_inner = self.create_neumorphic_card(parent)
-        settings_card.pack(fill=tk.X, pady=(0, 40), padx=(0, 30))
-
-        config_title = tk.Frame(settings_inner, bg='#ffffff')
-        config_title.pack(fill=tk.X, pady=(0, 15))
-
+        config_title = tk.Frame(parent, bg=self.colors['bg'])
+        config_title.pack(fill=tk.X, pady=(0, 20))
+        
         tk.Label(config_title, text="⚙️", font=('Inter', 20),
-                bg='#ffffff').pack(side=tk.LEFT, padx=(0, 10))
-
+                bg=self.colors['bg']).pack(side=tk.LEFT, padx=(0, 10))
+        
         tk.Label(config_title, text="Configuración de Tiempo",
                 font=('Inter', 16, 'bold'),
-                bg='#ffffff', fg='#000000').pack(side=tk.LEFT)
-
-        tk.Frame(settings_inner, bg='#e0e0e0', height=1).pack(fill=tk.X, pady=(0, 20))
-
-        settings_content = tk.Frame(settings_inner, bg='#ffffff')
-        settings_content.pack(fill=tk.X)
-
-        self.create_setting(settings_content, "Delay entre mensajes (seg):",
+                bg=self.colors['bg'], fg='#000000').pack(side=tk.LEFT)
+        
+        tk.Frame(parent, bg='#e0e0e0', height=1).pack(fill=tk.X, pady=(0, 25))
+        
+        # Settings
+        settings = tk.Frame(parent, bg=self.colors['bg'])
+        settings.pack(fill=tk.X, pady=(0, 40))
+        
+        self.create_setting(settings, "Delay entre mensajes (seg):",
                           self.delay_min, self.delay_max, 0)
-        self.create_setting(settings_content, "Espera después de abrir (seg):",
+        self.create_setting(settings, "Espera después de abrir (seg):",
                           self.wait_after_open, None, 1)
-        self.create_setting(settings_content, "Espera después del 1er ENTER (seg):",
+        self.create_setting(settings, "Espera después del 1er ENTER (seg):",
                           self.wait_after_first_enter, None, 2)
-
+        
         # Acciones
-        actions_card, actions_inner = self.create_neumorphic_card(parent)
-        actions_card.pack(fill=tk.X, pady=(0, 30), padx=(0, 30))
-
-        actions_title = tk.Frame(actions_inner, bg='#ffffff')
-        actions_title.pack(fill=tk.X, pady=(0, 15))
-
+        actions_title = tk.Frame(parent, bg=self.colors['bg'])
+        actions_title.pack(fill=tk.X, pady=(0, 20))
+        
         tk.Label(actions_title, text="👤", font=('Inter', 20),
-                bg='#ffffff').pack(side=tk.LEFT, padx=(0, 10))
-
+                bg=self.colors['bg']).pack(side=tk.LEFT, padx=(0, 10))
+        
         tk.Label(actions_title, text="Acciones",
                 font=('Inter', 16, 'bold'),
-                bg='#ffffff', fg='#000000').pack(side=tk.LEFT)
+                bg=self.colors['bg'], fg='#000000').pack(side=tk.LEFT)
 
-        unlock_wrapper = tk.Frame(actions_title, bg='#ffffff')
+        unlock_wrapper = tk.Frame(actions_title, bg=self.colors['bg'])
         unlock_wrapper.pack(side=tk.LEFT, padx=(12, 0))
 
         unlock_shadow = tk.Frame(unlock_wrapper, bg='#c8ccd5', bd=0)
@@ -335,57 +450,60 @@ class Hermes:
             highlightcolor='#c8ccd5'
         )
         self.fidelizado_unlock_btn.pack()
-
-        tk.Frame(actions_inner, bg='#e0e0e0', height=1).pack(fill=tk.X, pady=(0, 20))
-
-        actions_body = tk.Frame(actions_inner, bg='#ffffff')
-        actions_body.pack(fill=tk.X)
-
+        
+        tk.Frame(parent, bg='#e0e0e0', height=1).pack(fill=tk.X, pady=(0, 25))
+        
+        # Botones
+        actions = tk.Frame(parent, bg=self.colors['bg'])
+        actions.pack(fill=tk.X)
+        
         # Botón 1
-        btn1_container = tk.Frame(actions_body, bg='#ffffff')
+        btn1_container = tk.Frame(actions, bg=self.colors['bg'])
         btn1_container.pack(fill=tk.X, pady=(0, 15))
-
+        
         num1 = tk.Label(btn1_container, text="1",
                        font=('Inter', 20, 'bold'),
                        bg='#e8eaed', fg=self.colors['text'],
                        width=3, height=1)
         num1.pack(side=tk.LEFT, padx=(0, 15))
-
-        self.btn_detect = tk.Button(btn1_container,
-                                    text="🔍  Detectar Dispositivos",
-                                    command=self.detect_devices,
-                                    bg=self.colors['blue'], fg='white',
-                                    font=('Inter', 13, 'bold'),
-                                    relief=tk.SOLID, cursor='hand2',
-                                    activebackground='#3367D6',
-                                    bd= 2, highlightthickness=0, highlightbackground='#1a56c7')
-        self.btn_detect.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=15)
-
+        
+        self.btn_detect = ShadowButton(
+            btn1_container,
+            text="🔍  Detectar Dispositivos",
+            command=self.detect_devices,
+            base_bg=self.colors['blue'],
+            active_bg='#3367D6',
+            text_color='white',
+            shadow_color='#c5c9d6'
+        )
+        self.btn_detect.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
         # Botón 2
-        btn2_container = tk.Frame(actions_body, bg='#ffffff')
+        btn2_container = tk.Frame(actions, bg=self.colors['bg'])
         btn2_container.pack(fill=tk.X, pady=(0, 15))
-
+        
         num2 = tk.Label(btn2_container, text="2",
                        font=('Inter', 20, 'bold'),
                        bg='#e8eaed', fg=self.colors['text'],
                        width=3, height=1)
         num2.pack(side=tk.LEFT, padx=(0, 15))
-
-        self.btn_load = tk.Button(btn2_container,
-                                 text="📄  Cargar y Procesar Excel",
-                                 command=self.load_and_process_excel,
-                                 bg=self.colors['green'], fg='white',
-                                 font=('Inter', 13, 'bold'),
-                                 relief=tk.SOLID, cursor='hand2',
-                                 activebackground='#17A34A',
-                                 bd= 2, highlightthickness=0, highlightbackground='#1a56c7')
-        self.btn_load.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=15)
+        
+        self.btn_load = ShadowButton(
+            btn2_container,
+            text="📄  Cargar y Procesar Excel",
+            command=self.load_and_process_excel,
+            base_bg=self.colors['green'],
+            active_bg='#17A34A',
+            text_color='white',
+            shadow_color='#c5c9d6'
+        )
+        self.btn_load.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
         # Sección Fidelizado
-        fidelizado_section = tk.Frame(actions_body, bg='#ffffff')
+        fidelizado_section = tk.Frame(actions, bg=self.colors['bg'])
         fidelizado_section.pack(fill=tk.X, pady=(0, 20))
 
-        secret_trigger_wrapper = tk.Frame(fidelizado_section, bg='#ffffff')
+        secret_trigger_wrapper = tk.Frame(fidelizado_section, bg=self.colors['bg'])
         secret_trigger_wrapper.pack(fill=tk.X, padx=(48, 0))
 
         shadow_frame = tk.Frame(secret_trigger_wrapper, bg='#c8ccd5', bd=0)
@@ -422,7 +540,7 @@ class Hermes:
         self.fidelizado_shadow = shadow_frame
 
         # Botón 3
-        btn3_container = tk.Frame(actions_body, bg='#ffffff')
+        btn3_container = tk.Frame(actions, bg=self.colors['bg'])
         btn3_container.pack(fill=tk.X, pady=(0, 25))
 
         num3 = tk.Label(btn3_container, text="3",
@@ -430,44 +548,53 @@ class Hermes:
                        bg='#e8eaed', fg=self.colors['text'],
                        width=3, height=1)
         num3.pack(side=tk.LEFT, padx=(0, 15))
-
-        self.btn_start = tk.Button(btn3_container,
-                                   text="▶  INICIAR ENVÍO",
-                                   command=self.start_sending,
-                                   bg=self.colors['green'], fg='white',
-                                   font=('Inter', 13, 'bold'),
-                                   relief=tk.SOLID, cursor='hand2',
-                                   activebackground='#17A34A',
-                                   bd= 2, highlightthickness=0, highlightbackground='#0f8239')
-        self.btn_start.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=15)
-
+        
+        self.btn_start = ShadowButton(
+            btn3_container,
+            text="▶  INICIAR ENVÍO",
+            command=self.start_sending,
+            base_bg='#34D399',
+            active_bg='#22C55E',
+            text_color='white',
+            shadow_color='#c5c9d6'
+        )
+        self.btn_start.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
         # Controles
-        controls = tk.Frame(actions_body, bg='#ffffff')
+        controls = tk.Frame(actions, bg=self.colors['bg'])
         controls.pack(fill=tk.X, pady=(10, 0))
+        
+        self.btn_pause = ShadowButton(
+            controls,
+            text="⏸  PAUSAR",
+            command=self.pause_sending,
+            base_bg='#FACC15',
+            active_bg='#EAB308',
+            text_color='#202124',
+            font=('Inter', 12, 'bold'),
+            shadow_color='#d4d7df',
+            disabled_bg='#e5e7eb',
+            disabled_fg='#9ca3af',
+            padding=(22, 12)
+        )
+        self.btn_pause.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
+        self.btn_pause.configure(state=tk.DISABLED)
 
-        self.btn_pause = tk.Button(controls,
-                                   text="⏸  PAUSAR",
-                                   command=self.pause_sending,
-                                   bg='#FF9800', fg='#000000',
-                                   font=('Inter', 12, 'bold'),
-                                   relief=tk.SOLID, cursor='hand2',
-                                   state=tk.DISABLED,
-                                   activebackground='#D67700',
-                                   bd=2, highlightthickness=0,
-                                   highlightbackground='#000000')
-        self.btn_pause.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=12, padx=(0, 10))
-
-        self.btn_stop = tk.Button(controls,
-                                 text="⏹  CANCELAR",
-                                 command=self.stop_sending,
-                                 bg='#EA4335', fg='#000000',
-                                 font=('Inter', 12, 'bold'),
-                                 relief=tk.SOLID, cursor='hand2',
-                                 state=tk.DISABLED,
-                                 activebackground='#D33426',
-                                 bd=2, highlightthickness=0,
-                                 highlightbackground='#000000')
-        self.btn_stop.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=12, padx=(10, 0))
+        self.btn_stop = ShadowButton(
+            controls,
+            text="⏹  CANCELAR",
+            command=self.stop_sending,
+            base_bg='#EA4335',
+            active_bg='#C5221F',
+            text_color='#ffffff',
+            font=('Inter', 12, 'bold'),
+            shadow_color='#d4d7df',
+            disabled_bg='#e5e7eb',
+            disabled_fg='#9ca3af',
+            padding=(22, 12)
+        )
+        self.btn_stop.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(10, 0))
+        self.btn_stop.configure(state=tk.DISABLED)
         
     def setup_right(self, parent):
         """Panel derecho"""
@@ -580,27 +707,24 @@ class Hermes:
             
     def create_setting(self, parent, label, var1, var2, row):
         """Crear fila de configuración"""
-        parent_bg = parent.cget('bg') if hasattr(parent, 'cget') else self.colors['bg']
-        parent.grid_columnconfigure(1, weight=1)
-
         tk.Label(parent, text=label,
                 font=('Inter', 12),
-                bg=parent_bg, fg=self.colors['text']).grid(
+                bg=self.colors['bg'], fg=self.colors['text']).grid(
                     row=row, column=0, sticky='w', pady=15)
-
-        controls = tk.Frame(parent, bg=parent_bg)
+        
+        controls = tk.Frame(parent, bg=self.colors['bg'])
         controls.grid(row=row, column=1, sticky='e', pady=15, padx=(20, 0))
-
+        
         combo1 = ttk.Combobox(controls, textvariable=var1, width=8,
                              font=('Inter', 11), state='normal',
                              values=list(range(1, 121)))
         combo1.pack(side=tk.LEFT, padx=(0, 10))
-
+        
         if var2:
             tk.Label(controls, text="-",
                     font=('Inter', 12),
-                    bg=parent_bg).pack(side=tk.LEFT, padx=(0, 10))
-
+                    bg=self.colors['bg']).pack(side=tk.LEFT, padx=(0, 10))
+            
             combo2 = ttk.Combobox(controls, textvariable=var2, width=8,
                                  font=('Inter', 11), state='normal',
                                  values=list(range(1, 121)))
