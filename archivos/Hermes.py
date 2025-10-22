@@ -343,6 +343,7 @@ class Hermes:
         
         # Canvas para scroll
         canvas = tk.Canvas(main_container, bg=self.colors['bg'], highlightthickness=0)
+        self.main_canvas = canvas
         scrollbar = tk.Scrollbar(main_container, orient="vertical", command=canvas.yview)
         main = tk.Frame(canvas, bg=self.colors['bg'])
         main.grid_columnconfigure(0, weight=1)
@@ -381,7 +382,12 @@ class Hermes:
 
         def _on_main_configure(event):
             canvas.configure(scrollregion=canvas.bbox("all"))
-            self._update_main_layout(event.width)
+            available_width = 0
+            if hasattr(self, 'main_canvas'):
+                available_width = self.main_canvas.winfo_width()
+            if not available_width and hasattr(self, 'root'):
+                available_width = self.root.winfo_width()
+            self._update_main_layout(available_width)
 
         main.bind("<Configure>", _on_main_configure)
 
@@ -697,10 +703,17 @@ class Hermes:
         self.log("ℹ Sigue los pasos 1, 2, 3 y 4", 'info')
         self.log("✓ ADB detectado", 'success')
 
-    def _update_main_layout(self, width):
+    def _update_main_layout(self, width=None):
         """Actualizar disposición principal entre columnas y modo apilado"""
         if not hasattr(self, 'left_panel') or not hasattr(self, 'right_panel'):
             return
+
+        if not width:
+            width = 0
+            if hasattr(self, 'main_canvas'):
+                width = self.main_canvas.winfo_width()
+            if not width and hasattr(self, 'root'):
+                width = self.root.winfo_width()
 
         threshold = 1100
         mode = 'stacked' if width and width < threshold else 'columns'
