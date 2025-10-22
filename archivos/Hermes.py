@@ -74,12 +74,19 @@ class Hermes:
         self.manual_messages = []
         self.manual_mode = False
         self.manual_loops = 1
-        
+
         # Variables del procesador
         self.raw_data = []
         self.columns = []
         self.selected_columns = []
         self.phone_columns = []
+
+        # Fidelizado
+        self.fidelizado_unlocked = False
+        self.fidelizado_wrapper = None
+        self.fidelizado_shadow = None
+        self.fidelizado_trigger = None
+        self.fidelizado_unlock_btn = None
         
         # Colores de Hermes
         self.colors = {
@@ -219,6 +226,38 @@ class Hermes:
         tk.Label(actions_title, text="Acciones",
                 font=('Inter', 16, 'bold'),
                 bg=self.colors['bg'], fg='#000000').pack(side=tk.LEFT)
+
+        unlock_wrapper = tk.Frame(actions_title, bg=self.colors['bg'])
+        unlock_wrapper.pack(side=tk.LEFT, padx=(12, 0))
+
+        unlock_shadow = tk.Frame(unlock_wrapper, bg='#c8ccd5', bd=0)
+        unlock_shadow.place(x=1, y=2)
+
+        unlock_button_container = tk.Frame(unlock_wrapper, bg='#f7f9fc', bd=0)
+        unlock_button_container.pack()
+
+        def _sync_unlock_shadow(event):
+            unlock_shadow.place_configure(width=event.width, height=event.height)
+
+        unlock_button_container.bind("<Configure>", _sync_unlock_shadow)
+        unlock_shadow.lower()
+
+        self.fidelizado_unlock_btn = tk.Button(
+            unlock_button_container,
+            text="🔒",
+            command=self.request_fidelizado_access,
+            bg='#ffffff', fg=self.colors['text'],
+            font=('Inter', 11, 'bold'),
+            relief=tk.RAISED, cursor='hand2',
+            activebackground='#e5e7eb',
+            bd=1,
+            padx=6,
+            pady=2,
+            highlightthickness=1,
+            highlightbackground='#c8ccd5',
+            highlightcolor='#c8ccd5'
+        )
+        self.fidelizado_unlock_btn.pack()
         
         tk.Frame(parent, bg='#e0e0e0', height=1).pack(fill=tk.X, pady=(0, 25))
         
@@ -273,7 +312,7 @@ class Hermes:
         secret_trigger_wrapper = tk.Frame(fidelizado_section, bg=self.colors['bg'])
         secret_trigger_wrapper.pack(fill=tk.X, padx=(48, 0))
 
-        shadow_frame = tk.Frame(secret_trigger_wrapper, bg='#d0d4dc', bd=0)
+        shadow_frame = tk.Frame(secret_trigger_wrapper, bg='#c8ccd5', bd=0)
         shadow_frame.place(x=14, y=16)
 
         fidelizado_trigger_container = tk.Frame(secret_trigger_wrapper, bg='#f7f9fc', bd=0)
@@ -289,16 +328,22 @@ class Hermes:
             fidelizado_trigger_container,
             text="📱  Fidelizado",
             command=self.handle_fidelizado_access,
-            bg=self.colors['orange'], fg='#000000',
+            bg='#1f2937', fg='#ffffff',
             font=('Inter', 13, 'bold'),
             relief=tk.RAISED, cursor='hand2',
-            activebackground='#e3a10b',
-            bd=3,
+            activebackground='#111827',
+            bd=2,
             highlightthickness=1,
-            highlightbackground='#b27d0a',
-            highlightcolor='#b27d0a'
+            highlightbackground='#111827',
+            highlightcolor='#111827'
         )
         self.fidelizado_trigger.pack(fill=tk.X, ipady=12)
+
+        self.fidelizado_trigger.configure(state=tk.DISABLED)
+        secret_trigger_wrapper.pack_forget()
+
+        self.fidelizado_wrapper = secret_trigger_wrapper
+        self.fidelizado_shadow = shadow_frame
 
         # Botón 3
         btn3_container = tk.Frame(actions, bg=self.colors['bg'])
@@ -666,8 +711,165 @@ class Hermes:
             self.log(f"✗ Error al leer archivo: {e}", 'error')
             messagebox.showerror("Error", f"Error al leer archivo: {e}")
 
+    def _show_fidelizado_trigger(self):
+        """Mostrar el botón Fidelizado respetando la sombra"""
+        if self.fidelizado_wrapper and not self.fidelizado_wrapper.winfo_manager():
+            self.fidelizado_wrapper.pack(fill=tk.X, padx=(48, 0))
+        if self.fidelizado_shadow:
+            self.fidelizado_shadow.lower()
+
+    def _prompt_fidelizado_password(self):
+        """Ventana personalizada para solicitar la contraseña de Fidelizado"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Acceso Fidelizado")
+        dialog.configure(bg=self.colors['bg'])
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.resizable(False, False)
+
+        dialog.update_idletasks()
+        width, height = 360, 240
+        root_width = max(self.root.winfo_width(), width)
+        root_height = max(self.root.winfo_height(), height)
+        x = self.root.winfo_rootx() + (root_width // 2) - (width // 2)
+        y = self.root.winfo_rooty() + (root_height // 2) - (height // 2)
+        dialog.geometry(f"{width}x{height}+{x}+{y}")
+
+        card = tk.Frame(dialog, bg='#ffffff', bd=0, relief=tk.FLAT)
+        card.pack(fill=tk.BOTH, expand=True, padx=24, pady=24)
+
+        header = tk.Frame(card, bg='#ffffff')
+        header.pack(fill=tk.X, pady=(0, 18))
+
+        icon_wrapper = tk.Frame(header, bg='#e4e7ef', width=54, height=54)
+        icon_wrapper.pack(side=tk.LEFT)
+        icon_wrapper.pack_propagate(False)
+        tk.Label(icon_wrapper, text="🔐", font=('Inter', 24), bg='#e4e7ef').pack(expand=True, fill=tk.BOTH)
+
+        tk.Label(
+            header,
+            text="Desbloquear Fidelizado",
+            font=('Inter', 16, 'bold'),
+            bg='#ffffff', fg=self.colors['text']
+        ).pack(anchor='w', padx=(16, 0))
+
+        tk.Label(
+            card,
+            text="Ingresa la contraseña para acceder a las funciones Fidelizado",
+            font=('Inter', 11),
+            bg='#ffffff', fg=self.colors['text_light'],
+            wraplength=280,
+            justify='left'
+        ).pack(anchor='w')
+
+        entry_container = tk.Frame(card, bg='#ffffff')
+        entry_container.pack(fill=tk.X, pady=(18, 10))
+
+        entry_wrapper = tk.Frame(entry_container, bg='#ffffff', bd=0, relief=tk.FLAT)
+        entry_wrapper.pack(fill=tk.X)
+
+        entry_shadow = tk.Frame(entry_wrapper, bg='#c8ccd5', bd=0)
+        entry_shadow.place(relx=0, rely=0, relwidth=1, relheight=1, x=2, y=2)
+
+        entry_body = tk.Frame(entry_wrapper, bg='#f8f9fc', bd=0, relief=tk.FLAT)
+        entry_body.pack(fill=tk.X)
+
+        password_var = tk.StringVar()
+        password_entry = tk.Entry(
+            entry_body,
+            textvariable=password_var,
+            font=('Inter', 12),
+            show='*',
+            relief=tk.FLAT,
+            bg='#f8f9fc',
+            fg=self.colors['text'],
+            insertbackground=self.colors['text']
+        )
+        password_entry.pack(fill=tk.X, padx=14, pady=12)
+        password_entry.focus_set()
+
+        result = {'value': None}
+
+        buttons = tk.Frame(card, bg='#ffffff')
+        buttons.pack(fill=tk.X, pady=(12, 0))
+
+        def close_dialog(value=None):
+            result['value'] = value
+            dialog.destroy()
+
+        def submit(event=None):
+            close_dialog(password_var.get().strip())
+
+        def cancel(event=None):
+            close_dialog(None)
+
+        primary_btn = tk.Button(
+            buttons,
+            text="Desbloquear",
+            command=submit,
+            bg=self.colors['blue'],
+            fg='white',
+            font=('Inter', 11, 'bold'),
+            relief=tk.FLAT,
+            activebackground='#3367D6',
+            cursor='hand2',
+            padx=14,
+            pady=8
+        )
+        primary_btn.pack(side=tk.RIGHT)
+
+        secondary_btn = tk.Button(
+            buttons,
+            text="Cancelar",
+            command=cancel,
+            bg='#e5e7eb',
+            fg=self.colors['text'],
+            font=('Inter', 11),
+            relief=tk.FLAT,
+            activebackground='#d1d5db',
+            cursor='hand2',
+            padx=14,
+            pady=8
+        )
+        secondary_btn.pack(side=tk.RIGHT, padx=(0, 12))
+
+        dialog.bind('<Return>', submit)
+        dialog.bind('<Escape>', cancel)
+        dialog.protocol('WM_DELETE_WINDOW', cancel)
+
+        dialog.wait_window()
+        return result['value']
+
+    def request_fidelizado_access(self):
+        """Solicitar acceso protegido para Fidelizado"""
+        if self.fidelizado_unlocked:
+            self._show_fidelizado_trigger()
+            if self.fidelizado_trigger:
+                self.fidelizado_trigger.configure(state=tk.NORMAL)
+            if hasattr(self, 'fidelizado_unlock_btn') and self.fidelizado_unlock_btn:
+                self.fidelizado_unlock_btn.configure(text="🔓")
+            return
+
+        password = self._prompt_fidelizado_password()
+
+        if password is None:
+            return
+
+        if password != "feli2109":
+            messagebox.showerror("-beta-", "Contraseña incorrecta")
+            return
+
+        self.fidelizado_unlocked = True
+        if self.fidelizado_trigger:
+            self.fidelizado_trigger.configure(state=tk.NORMAL)
+        if hasattr(self, 'fidelizado_unlock_btn') and self.fidelizado_unlock_btn:
+            self.fidelizado_unlock_btn.configure(text="🔓")
+        self._show_fidelizado_trigger()
+
     def handle_fidelizado_access(self):
         """Acceso unificado a la ventana de Fidelizado"""
+        if not self.fidelizado_unlocked:
+            return
         self.open_manual_input_window()
 
     def open_manual_input_window(self):
