@@ -8,6 +8,7 @@ import subprocess
 import time
 import random
 import tkinter as tk
+import tkinter.font as tkfont
 from tkinter import ttk, filedialog, messagebox, scrolledtext
 import os
 import threading
@@ -50,6 +51,29 @@ def darken_color(color, factor=0.1):
     return f"#{int(r):02x}{int(g):02x}{int(b):02x}"
 
 
+def create_rounded_rectangle(canvas, x1, y1, x2, y2, radius, **kwargs):
+    """Draw a rounded rectangle on the given canvas."""
+    radius = max(0, min(radius, (x2 - x1) / 2, (y2 - y1) / 2))
+    if radius == 0:
+        return canvas.create_rectangle(x1, y1, x2, y2, **kwargs)
+
+    points = [
+        x1 + radius, y1,
+        x2 - radius, y1,
+        x2, y1,
+        x2, y1 + radius,
+        x2, y2 - radius,
+        x2, y2,
+        x2 - radius, y2,
+        x1 + radius, y2,
+        x1, y2,
+        x1, y2 - radius,
+        x1, y1 + radius,
+        x1, y1,
+    ]
+    return canvas.create_polygon(points, smooth=True, **kwargs)
+
+
 class ShadowButton:
     """Custom button with a floating shadow frame and neumorphic styling."""
 
@@ -68,15 +92,12 @@ class ShadowButton:
         disabled_bg='#d1d5db',
         disabled_fg='#9ca3af',
         cursor='hand2',
-        padding=(24, 14)
+        padding=(24, 14),
+        corner_radius=16
     ):
         self.parent = parent
         self.parent_bg = parent.cget('bg') if hasattr(parent, 'cget') else '#ffffff'
         self.wrapper = tk.Frame(parent, bg=self.parent_bg)
-
-        self.shadow = tk.Frame(self.wrapper, bg=shadow_color, bd=0, highlightthickness=0)
-        self.shadow.place(x=shadow_offset[0], y=shadow_offset[1])
-
         self.base_bg = base_bg
         self.text_color = text_color
         self.active_bg = active_bg
@@ -86,46 +107,46 @@ class ShadowButton:
         self.disabled_fg = disabled_fg
         self.cursor = cursor
         self.command = command
+        self.corner_radius = corner_radius
+        self.shadow_offset = shadow_offset
+        self.padding = padding
+        self.font = font
+        self.font_obj = tkfont.Font(font=font)
+        self.text = text
+
+        self.button_height = self.font_obj.metrics('linespace') + (self.padding[1] * 2)
+        self.min_width = self.font_obj.measure(self.text) + (self.padding[0] * 2)
 
         outline_color = darken_color(base_bg, 0.18)
+        self.outline_color = outline_color
 
-        self.button_frame = tk.Frame(
+        self.canvas = tk.Canvas(
             self.wrapper,
-            bg=self.base_bg,
+            bg=self.parent_bg,
             bd=0,
-            relief=tk.FLAT,
-            highlightthickness=1,
-            highlightbackground=outline_color,
-            highlightcolor=outline_color
+            highlightthickness=0,
+            cursor=self.cursor,
         )
-        self.button_frame.pack(fill=tk.X, expand=True)
+        self.canvas.pack(fill=tk.X, expand=True)
+        self.canvas.configure(height=self._get_canvas_height())
 
-        self.label = tk.Label(
-            self.button_frame,
-            text=text,
-            bg=self.base_bg,
-            fg=self.text_color,
-            font=font,
-            padx=padding[0],
-            pady=padding[1],
-            cursor=self.cursor
-        )
-        self.label.pack(fill=tk.X, expand=True)
+        self.button_id = None
+        self.shadow_id = None
+        self.text_id = None
+        self._button_bbox = (0, 0, 0, 0)
+        self._current_bg = self.base_bg
+        self._current_width = self.min_width + self.shadow_offset[0] + 2
 
-        def _sync_shadow(event):
-            self.shadow.place_configure(width=event.width, height=event.height)
+        self.canvas.bind('<Configure>', self._on_canvas_configure)
+        self.canvas.bind('<Enter>', self._on_enter)
+        self.canvas.bind('<Leave>', self._on_leave)
+        self.canvas.bind('<ButtonPress-1>', self._on_press)
+        self.canvas.bind('<ButtonRelease-1>', self._on_release)
 
-        self.button_frame.bind('<Configure>', _sync_shadow)
-        self.shadow.lower()
+        self._redraw()
 
         self.state = tk.NORMAL
         self._pressed = False
-
-        for widget in (self.button_frame, self.label):
-            widget.bind('<Enter>', self._on_enter)
-            widget.bind('<Leave>', self._on_leave)
-            widget.bind('<ButtonPress-1>', self._on_press)
-            widget.bind('<ButtonRelease-1>', self._on_release)
 
     # Geometry management proxies
     def pack(self, *args, **kwargs):
@@ -140,23 +161,37 @@ class ShadowButton:
     # Configuration methods
     def configure(self, **kwargs):
         if 'text' in kwargs:
-            self.label.configure(text=kwargs.pop('text'))
+            self.text = kwargs.pop('text')
+            self.min_width = self.font_obj.measure(self.text) + (self.padding[0] * 2)
+            if self.text_id:
+                self.canvas.itemconfigure(self.text_id, text=self.text)
+            self._redraw()
         if 'command' in kwargs:
             self.command = kwargs.pop('command')
         if 'state' in kwargs:
             self._set_state(kwargs.pop('state'))
         if 'fg' in kwargs:
             self.text_color = kwargs['fg']
-            if self.state == tk.NORMAL:
-                self.label.configure(fg=kwargs['fg'])
+            if self.state == tk.NORMAL and self.text_id:
+                self.canvas.itemconfigure(self.text_id, fill=self.text_color)
             kwargs.pop('fg')
         if 'bg' in kwargs:
             self.base_bg = kwargs['bg']
             if self.state == tk.NORMAL:
                 self._set_bg(self.base_bg)
             kwargs.pop('bg')
+        if 'font' in kwargs:
+            self.font = kwargs['font']
+            self.font_obj = tkfont.Font(font=self.font)
+            self.button_height = self.font_obj.metrics('linespace') + (self.padding[1] * 2)
+            self.min_width = self.font_obj.measure(self.text) + (self.padding[0] * 2)
+            self.canvas.configure(height=self._get_canvas_height())
+            if self.text_id:
+                self.canvas.itemconfigure(self.text_id, font=self.font)
+            kwargs.pop('font')
         if kwargs:
-            self.label.configure(**kwargs)
+            if self.text_id:
+                self.canvas.itemconfigure(self.text_id, **kwargs)
 
     config = configure
 
@@ -164,19 +199,25 @@ class ShadowButton:
         self.state = state
         if state == tk.DISABLED:
             self._set_bg(self.disabled_bg, update_outline=True)
-            self.label.configure(fg=self.disabled_fg, cursor='arrow')
-            self.shadow.configure(bg=darken_color(self.disabled_bg, 0.1))
+            if self.text_id:
+                self.canvas.itemconfigure(self.text_id, fill=self.disabled_fg)
+            if self.shadow_id:
+                self.canvas.itemconfigure(self.shadow_id, fill=darken_color(self.disabled_bg, 0.1))
+            self.canvas.configure(cursor='arrow')
         else:
             self._set_bg(self.base_bg, update_outline=True)
-            self.label.configure(fg=self.text_color, cursor=self.cursor)
-            self.shadow.configure(bg=self.shadow_color)
+            if self.text_id:
+                self.canvas.itemconfigure(self.text_id, fill=self.text_color)
+            if self.shadow_id:
+                self.canvas.itemconfigure(self.shadow_id, fill=self.shadow_color)
+            self.canvas.configure(cursor=self.cursor)
 
     def _set_bg(self, color, update_outline=False):
-        self.button_frame.configure(bg=color)
-        self.label.configure(bg=color)
+        self._current_bg = color
         if update_outline:
-            outline = darken_color(color, 0.18)
-            self.button_frame.configure(highlightbackground=outline, highlightcolor=outline)
+            self.outline_color = darken_color(color, 0.18)
+        if self.button_id:
+            self.canvas.itemconfigure(self.button_id, fill=color, outline=self.outline_color)
 
     # Event handlers
     def _on_enter(self, _event):
@@ -200,13 +241,71 @@ class ShadowButton:
         if self.state != tk.NORMAL or not self._pressed:
             return
         self._pressed = False
-        widget = event.widget
-        width = widget.winfo_width()
-        height = widget.winfo_height()
-        inside = 0 <= event.x <= width and 0 <= event.y <= height
+        x1, y1, x2, y2 = self._button_bbox
+        inside = x1 <= event.x <= x2 and y1 <= event.y <= y2
         if inside and callable(self.command):
             self.command()
         self._set_bg(self.hover_bg if inside else self.base_bg)
+
+    # Internal drawing helpers
+    def _get_canvas_height(self):
+        return self.button_height + self.shadow_offset[1] + 2
+
+    def _on_canvas_configure(self, event):
+        self._current_width = event.width
+        self._redraw()
+
+    def _redraw(self):
+        width = max(self._current_width, self.min_width + self.shadow_offset[0] + 2)
+        button_width = max(width - self.shadow_offset[0], self.min_width)
+        button_height = self.button_height
+        radius = min(self.corner_radius, button_height / 2)
+
+        x1 = 0
+        y1 = 0
+        x2 = x1 + button_width
+        y2 = y1 + button_height
+
+        shadow_x1 = x1 + self.shadow_offset[0]
+        shadow_y1 = y1 + self.shadow_offset[1]
+        shadow_x2 = shadow_x1 + button_width
+        shadow_y2 = shadow_y1 + button_height
+
+        self.canvas.delete('all')
+
+        self.shadow_id = create_rounded_rectangle(
+            self.canvas,
+            shadow_x1,
+            shadow_y1,
+            shadow_x2,
+            shadow_y2,
+            radius,
+            fill=self.shadow_color,
+            outline=''
+        )
+
+        self.button_id = create_rounded_rectangle(
+            self.canvas,
+            x1,
+            y1,
+            x2,
+            y2,
+            radius,
+            fill=self._current_bg,
+            outline=self.outline_color,
+            width=1
+        )
+
+        text_color = self.text_color if self.state == tk.NORMAL else self.disabled_fg
+        self.text_id = self.canvas.create_text(
+            x1 + button_width / 2,
+            y1 + button_height / 2,
+            text=self.text,
+            fill=text_color,
+            font=self.font
+        )
+        self.canvas.tag_raise(self.text_id, self.button_id)
+        self._button_bbox = (x1, y1, x2, y2)
 
 
 # Verificar dependencias
@@ -276,7 +375,6 @@ class Hermes:
         # Fidelizado
         self.fidelizado_unlocked = False
         self.fidelizado_wrapper = None
-        self.fidelizado_shadow = None
         self.fidelizado_trigger = None
         self.fidelizado_unlock_btn = None
         
@@ -288,6 +386,12 @@ class Hermes:
             'bg': '#f8f9fa',
             'text': '#202124',
             'text_light': '#5f6368',
+            'action_detect': '#2563EB',
+            'action_excel': '#F97316',
+            'action_fidelizador': '#111827',
+            'action_start': '#16A34A',
+            'action_pause': '#FB923C',
+            'action_cancel': '#DC2626',
         }
         
         self.setup_ui()
@@ -481,8 +585,8 @@ class Hermes:
             btn1_container,
             text="🔍  Detectar Dispositivos",
             command=self.detect_devices,
-            base_bg=self.colors['blue'],
-            active_bg='#3367D6',
+            base_bg=self.colors['action_detect'],
+            active_bg=darken_color(self.colors['action_detect'], 0.18),
             text_color='white',
             shadow_color='#c5c9d6'
         )
@@ -502,8 +606,8 @@ class Hermes:
             btn2_container,
             text="📄  Cargar y Procesar Excel",
             command=self.load_and_process_excel,
-            base_bg=self.colors['green'],
-            active_bg='#17A34A',
+            base_bg=self.colors['action_excel'],
+            active_bg=darken_color(self.colors['action_excel'], 0.18),
             text_color='white',
             shadow_color='#c5c9d6'
         )
@@ -516,38 +620,24 @@ class Hermes:
         secret_trigger_wrapper = tk.Frame(fidelizado_section, bg=self.colors['bg'])
         secret_trigger_wrapper.pack(fill=tk.X, padx=(48, 0))
 
-        shadow_frame = tk.Frame(secret_trigger_wrapper, bg='#c8ccd5', bd=0)
-        shadow_frame.place(x=14, y=16)
-
-        fidelizado_trigger_container = tk.Frame(secret_trigger_wrapper, bg='#f7f9fc', bd=0)
-        fidelizado_trigger_container.pack(fill=tk.X, padx=12, pady=12)
-
-        def _sync_shadow(event):
-            shadow_frame.place_configure(width=event.width, height=event.height)
-
-        fidelizado_trigger_container.bind("<Configure>", _sync_shadow)
-        shadow_frame.lower()
-
-        self.fidelizado_trigger = tk.Button(
-            fidelizado_trigger_container,
+        self.fidelizado_trigger = ShadowButton(
+            secret_trigger_wrapper,
             text="📱  Fidelizado",
             command=self.handle_fidelizado_access,
-            bg='#1f2937', fg='#ffffff',
+            base_bg=self.colors['action_fidelizador'],
+            active_bg=darken_color(self.colors['action_fidelizador'], 0.18),
+            text_color='#ffffff',
             font=('Inter', 13, 'bold'),
-            relief=tk.RAISED, cursor='hand2',
-            activebackground='#111827',
-            bd=2,
-            highlightthickness=1,
-            highlightbackground='#111827',
-            highlightcolor='#111827'
+            shadow_color='#c5c9d6',
+            padding=(24, 14),
+            corner_radius=18
         )
-        self.fidelizado_trigger.pack(fill=tk.X, ipady=12)
+        self.fidelizado_trigger.pack(fill=tk.X, padx=12, pady=12)
 
         self.fidelizado_trigger.configure(state=tk.DISABLED)
         secret_trigger_wrapper.pack_forget()
 
         self.fidelizado_wrapper = secret_trigger_wrapper
-        self.fidelizado_shadow = shadow_frame
 
         # Botón 3
         btn3_container = tk.Frame(actions, bg=self.colors['bg'])
@@ -563,8 +653,8 @@ class Hermes:
             btn3_container,
             text="▶  INICIAR ENVÍO",
             command=self.start_sending,
-            base_bg='#34D399',
-            active_bg='#22C55E',
+            base_bg=self.colors['action_start'],
+            active_bg=darken_color(self.colors['action_start'], 0.18),
             text_color='white',
             shadow_color='#c5c9d6'
         )
@@ -578,9 +668,9 @@ class Hermes:
             controls,
             text="⏸  PAUSAR",
             command=self.pause_sending,
-            base_bg='#FACC15',
-            active_bg='#EAB308',
-            text_color='#202124',
+            base_bg=self.colors['action_pause'],
+            active_bg=darken_color(self.colors['action_pause'], 0.18),
+            text_color='#ffffff',
             font=('Inter', 12, 'bold'),
             shadow_color='#d4d7df',
             disabled_bg='#e5e7eb',
@@ -594,8 +684,8 @@ class Hermes:
             controls,
             text="⏹  CANCELAR",
             command=self.stop_sending,
-            base_bg='#EA4335',
-            active_bg='#C5221F',
+            base_bg=self.colors['action_cancel'],
+            active_bg=darken_color(self.colors['action_cancel'], 0.18),
             text_color='#ffffff',
             font=('Inter', 12, 'bold'),
             shadow_color='#d4d7df',
@@ -970,8 +1060,6 @@ class Hermes:
         """Mostrar el botón Fidelizado respetando la sombra"""
         if self.fidelizado_wrapper and not self.fidelizado_wrapper.winfo_manager():
             self.fidelizado_wrapper.pack(fill=tk.X, padx=(48, 0))
-        if self.fidelizado_shadow:
-            self.fidelizado_shadow.lower()
 
     def _prompt_fidelizado_password(self):
         """Ventana personalizada para solicitar la contraseña de Fidelizado"""
