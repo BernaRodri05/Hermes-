@@ -143,10 +143,10 @@ class ShadowButton:
         self.canvas.bind('<ButtonPress-1>', self._on_press)
         self.canvas.bind('<ButtonRelease-1>', self._on_release)
 
-        self._redraw()
-
         self.state = tk.NORMAL
         self._pressed = False
+
+        self._redraw()
 
     # Geometry management proxies
     def pack(self, *args, **kwargs):
