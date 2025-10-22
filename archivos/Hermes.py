@@ -86,14 +86,14 @@ class ShadowButton:
         active_bg,
         text_color='#ffffff',
         font=('Inter', 13, 'bold'),
-        shadow_color='#cbd5e1',
-        shadow_offset=(6, 6),
+        shadow_color=None,
+        shadow_offset=(4, 6),
         hover_bg=None,
         disabled_bg='#d1d5db',
         disabled_fg='#9ca3af',
         cursor='hand2',
         padding=(24, 14),
-        corner_radius=16
+        corner_radius=24
     ):
         self.parent = parent
         self.parent_bg = parent.cget('bg') if hasattr(parent, 'cget') else '#ffffff'
@@ -101,8 +101,10 @@ class ShadowButton:
         self.base_bg = base_bg
         self.text_color = text_color
         self.active_bg = active_bg
+        self._custom_hover = hover_bg is not None
+        self._custom_shadow = shadow_color is not None
         self.hover_bg = hover_bg or lighten_color(base_bg, 0.08)
-        self.shadow_color = shadow_color
+        self.shadow_color = shadow_color or darken_color(self.base_bg, 0.25)
         self.disabled_bg = disabled_bg
         self.disabled_fg = disabled_fg
         self.cursor = cursor
@@ -177,8 +179,15 @@ class ShadowButton:
             kwargs.pop('fg')
         if 'bg' in kwargs:
             self.base_bg = kwargs['bg']
+            if not self._custom_hover:
+                self.hover_bg = lighten_color(self.base_bg, 0.08)
+            if not self._custom_shadow:
+                self.shadow_color = darken_color(self.base_bg, 0.25)
+            self._apply_shadow_fill()
             if self.state == tk.NORMAL:
-                self._set_bg(self.base_bg)
+                self._set_bg(self.base_bg, update_outline=True)
+            else:
+                self.outline_color = darken_color(self.base_bg, 0.18)
             kwargs.pop('bg')
         if 'font' in kwargs:
             self.font = kwargs['font']
@@ -201,15 +210,13 @@ class ShadowButton:
             self._set_bg(self.disabled_bg, update_outline=True)
             if self.text_id:
                 self.canvas.itemconfigure(self.text_id, fill=self.disabled_fg)
-            if self.shadow_id:
-                self.canvas.itemconfigure(self.shadow_id, fill=darken_color(self.disabled_bg, 0.1))
+            self._apply_shadow_fill()
             self.canvas.configure(cursor='arrow')
         else:
             self._set_bg(self.base_bg, update_outline=True)
             if self.text_id:
                 self.canvas.itemconfigure(self.text_id, fill=self.text_color)
-            if self.shadow_id:
-                self.canvas.itemconfigure(self.shadow_id, fill=self.shadow_color)
+            self._apply_shadow_fill()
             self.canvas.configure(cursor=self.cursor)
 
     def _set_bg(self, color, update_outline=False):
@@ -218,6 +225,12 @@ class ShadowButton:
             self.outline_color = darken_color(color, 0.18)
         if self.button_id:
             self.canvas.itemconfigure(self.button_id, fill=color, outline=self.outline_color)
+
+    def _apply_shadow_fill(self):
+        if not self.shadow_id:
+            return
+        fill = self.shadow_color if self.state == tk.NORMAL else darken_color(self.disabled_bg, 0.1)
+        self.canvas.itemconfigure(self.shadow_id, fill=fill)
 
     # Event handlers
     def _on_enter(self, _event):
@@ -280,7 +293,7 @@ class ShadowButton:
             shadow_x2,
             shadow_y2,
             radius,
-            fill=self.shadow_color,
+            fill=self.shadow_color if self.state == tk.NORMAL else darken_color(self.disabled_bg, 0.1),
             outline=''
         )
 
@@ -306,6 +319,7 @@ class ShadowButton:
         )
         self.canvas.tag_raise(self.text_id, self.button_id)
         self._button_bbox = (x1, y1, x2, y2)
+        self._apply_shadow_fill()
 
 
 # Verificar dependencias
@@ -587,8 +601,7 @@ class Hermes:
             command=self.detect_devices,
             base_bg=self.colors['action_detect'],
             active_bg=darken_color(self.colors['action_detect'], 0.18),
-            text_color='white',
-            shadow_color='#c5c9d6'
+            text_color='white'
         )
         self.btn_detect.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
@@ -608,8 +621,7 @@ class Hermes:
             command=self.load_and_process_excel,
             base_bg=self.colors['action_excel'],
             active_bg=darken_color(self.colors['action_excel'], 0.18),
-            text_color='white',
-            shadow_color='#c5c9d6'
+            text_color='white'
         )
         self.btn_load.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
@@ -628,7 +640,6 @@ class Hermes:
             active_bg=darken_color(self.colors['action_fidelizador'], 0.18),
             text_color='#ffffff',
             font=('Inter', 13, 'bold'),
-            shadow_color='#c5c9d6',
             padding=(24, 14),
             corner_radius=18
         )
@@ -655,8 +666,7 @@ class Hermes:
             command=self.start_sending,
             base_bg=self.colors['action_start'],
             active_bg=darken_color(self.colors['action_start'], 0.18),
-            text_color='white',
-            shadow_color='#c5c9d6'
+            text_color='white'
         )
         self.btn_start.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
@@ -672,7 +682,6 @@ class Hermes:
             active_bg=darken_color(self.colors['action_pause'], 0.18),
             text_color='#ffffff',
             font=('Inter', 12, 'bold'),
-            shadow_color='#d4d7df',
             disabled_bg='#e5e7eb',
             disabled_fg='#9ca3af',
             padding=(22, 12)
@@ -688,7 +697,6 @@ class Hermes:
             active_bg=darken_color(self.colors['action_cancel'], 0.18),
             text_color='#ffffff',
             font=('Inter', 12, 'bold'),
-            shadow_color='#d4d7df',
             disabled_bg='#e5e7eb',
             disabled_fg='#9ca3af',
             padding=(22, 12)
