@@ -1204,7 +1204,10 @@ class Hermes:
             self.log("═" * 50, 'info')
             
             pkg = "com.whatsapp.w4b"
-            chrome = "com.android.chrome/com.google.android.apps.chrome.Main"
+            google_app = (
+                "com.google.android.googlequicksearchbox/"
+                "com.google.android.googlequicksearchbox.SearchActivity"
+            )
             idx = 0
             
             for i, link in enumerate(self.links, 1):
@@ -1218,7 +1221,7 @@ class Hermes:
                 device = self.devices[idx]
                 idx = (idx + 1) % len(self.devices)
                 
-                if self.send_msg(device, link, i, len(self.links), pkg, chrome):
+                if self.send_msg(device, link, i, len(self.links), pkg, google_app):
                     self.sent_count += 1
                 else:
                     self.failed_count += 1
@@ -1249,7 +1252,7 @@ class Hermes:
             self.btn_pause.config(state=tk.DISABLED)
             self.btn_stop.config(state=tk.DISABLED)
             
-    def send_msg(self, device, link, i, total, pkg, chrome):
+    def send_msg(self, device, link, i, total, pkg, app_component):
         """Enviar mensaje - Inyecta URL directamente"""
         try:
             num = link.split('wa.me/')[1].split('?')[0] if 'wa.me/' in link else "?"
@@ -1264,8 +1267,10 @@ class Hermes:
             
             # Método 1: Abrir con intent directo (más confiable)
             self.log("🔗 Inyectando URL...", 'info')
-            cmd = f'am start -a android.intent.action.VIEW -d "{link}"'
-            subprocess.run([adb, '-s', device, 'shell', cmd], 
+            cmd = (
+                f'am start -n {app_component} -a android.intent.action.VIEW -d "{link}"'
+            )
+            subprocess.run([adb, '-s', device, 'shell', cmd],
                           capture_output=True, timeout=10)
             
             time.sleep(self.wait_after_open.get())
